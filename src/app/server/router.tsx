@@ -8,6 +8,7 @@ import {
   listParseIssues,
   listProjects,
   listProviders,
+  listSavedFilters,
   listSourceRoots,
   listThreads,
 } from "../../db/repos/query-service";
@@ -34,6 +35,7 @@ function notFoundPage(config: AppConfig, db: Database, currentPath: string): Res
       currentPath={currentPath}
       projects={listProjects(db)}
       providers={listProviders(db)}
+      savedFilters={listSavedFilters(db)}
       stats={getDashboardStats(db)}
     />,
   );
@@ -69,6 +71,7 @@ function renderThreadsPage(config: AppConfig, db: Database, url: URL): string {
       notice={url.searchParams.get("notice")}
       projects={listProjects(db)}
       providers={listProviders(db)}
+      savedFilters={listSavedFilters(db)}
       query={query}
       result={listThreads(db, query)}
       stats={getDashboardStats(db)}
@@ -89,6 +92,7 @@ function renderThreadDetailPage(config: AppConfig, db: Database, threadId: strin
       detail={detail}
       projects={listProjects(db)}
       providers={listProviders(db)}
+      savedFilters={listSavedFilters(db)}
       stats={getDashboardStats(db)}
     />,
   );
@@ -101,6 +105,20 @@ export function createRouter(db: Database, config: AppConfig): (request: Request
     if (request.method === "POST" && url.pathname === "/actions/reindex") {
       await runIndex(db, config);
       return Response.redirect(`${url.origin}/threads?notice=${encodeURIComponent("Index refreshed")}`, 303);
+    }
+
+    if (request.method === "POST" && url.pathname === "/actions/save-filter") {
+      const formData = await request.formData();
+      const href = String(formData.get("href") ?? "/threads");
+      const name = String(formData.get("name") ?? "Saved Filter");
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      db.query("INSERT OR IGNORE INTO saved_filters (id, name, href, created_at) VALUES (?, ?, ?, ?)").run(
+        id,
+        name,
+        href,
+        new Date().toISOString(),
+      );
+      return Response.redirect(`${url.origin}${href}${href.includes("?") ? "&" : "?"}notice=${encodeURIComponent("Filter saved")}`, 303);
     }
 
     if (request.method === "POST" && url.pathname.startsWith("/actions/reindex/provider/")) {
@@ -130,6 +148,16 @@ export function createRouter(db: Database, config: AppConfig): (request: Request
       return htmlResponse(renderThreadsPage(config, db, url));
     }
 
+    if (url.pathname.startsWith("/providers/")) {
+      const providerId = decodeURIComponent(url.pathname.replace("/providers/", ""));
+      return Response.redirect(`${url.origin}/threads?provider=${encodeURIComponent(providerId)}`, 302);
+    }
+
+    if (url.pathname.startsWith("/projects/")) {
+      const projectName = decodeURIComponent(url.pathname.replace("/projects/", ""));
+      return Response.redirect(`${url.origin}/threads?project=${encodeURIComponent(projectName)}`, 302);
+    }
+
     if (url.pathname.startsWith("/threads/")) {
       const threadId = decodeURIComponent(url.pathname.replace("/threads/", ""));
       const html = renderThreadDetailPage(config, db, threadId);
@@ -144,6 +172,7 @@ export function createRouter(db: Database, config: AppConfig): (request: Request
             currentPath={url.pathname}
             projects={listProjects(db)}
             providers={listProviders(db)}
+            savedFilters={listSavedFilters(db)}
             rows={listParseIssues(db)}
             stats={getDashboardStats(db)}
           />,
@@ -159,6 +188,7 @@ export function createRouter(db: Database, config: AppConfig): (request: Request
             currentPath={url.pathname}
             projects={listProjects(db)}
             providers={listProviders(db)}
+            savedFilters={listSavedFilters(db)}
             rows={listSourceRoots(db)}
             stats={getDashboardStats(db)}
           />,
@@ -174,6 +204,7 @@ export function createRouter(db: Database, config: AppConfig): (request: Request
             currentPath={url.pathname}
             projects={listProjects(db)}
             providers={listProviders(db)}
+            savedFilters={listSavedFilters(db)}
             rows={listIndexRuns(db)}
             stats={getDashboardStats(db)}
           />,
@@ -189,6 +220,7 @@ export function createRouter(db: Database, config: AppConfig): (request: Request
             currentPath="/settings"
             projects={listProjects(db)}
             providers={listProviders(db)}
+            savedFilters={listSavedFilters(db)}
             stats={getDashboardStats(db)}
           />,
         ),

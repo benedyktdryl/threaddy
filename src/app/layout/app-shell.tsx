@@ -37,6 +37,7 @@ export function AppShell({
   stats,
   projects,
   providers,
+  savedFilters,
   config,
   children,
   toolbar,
@@ -46,6 +47,7 @@ export function AppShell({
   stats: DashboardStats;
   projects: Array<{ projectName: string; count: number }>;
   providers: Array<{ providerId: string; count: number }>;
+  savedFilters: Array<{ id: string; name: string; href: string }>;
   config: AppConfig;
   toolbar?: ReactNode;
 }>) {
@@ -277,10 +279,10 @@ export function AppShell({
             <div className="nav-group">
               <div className="nav-title">Providers</div>
               {providers.map((provider) => (
-                <div className="flex items-center justify-between rounded-[10px] px-2.5 py-2 text-sm text-[#6f6759]" key={provider.providerId}>
+                <NavLink href={`/providers/${encodeURIComponent(provider.providerId)}`} key={provider.providerId}>
                   <span>{provider.providerId}</span>
                   <span>{provider.count}</span>
-                </div>
+                </NavLink>
               ))}
             </div>
 
@@ -288,13 +290,26 @@ export function AppShell({
               <div className="nav-title">Projects</div>
               {projects.length > 0 ? (
                 projects.map((project) => (
-                  <div className="flex items-center justify-between rounded-[10px] px-2.5 py-2 text-sm text-[#6f6759]" key={project.projectName}>
+                  <NavLink href={`/projects/${encodeURIComponent(project.projectName)}`} key={project.projectName}>
                     <span>{project.projectName}</span>
                     <span>{project.count}</span>
-                  </div>
+                  </NavLink>
                 ))
               ) : (
                 <div className="rounded-[10px] px-2.5 py-2 text-sm text-[#6f6759]">No projects indexed</div>
+              )}
+            </div>
+
+            <div className="nav-group">
+              <div className="nav-title">Saved Filters</div>
+              {savedFilters.length > 0 ? (
+                savedFilters.map((filter) => (
+                  <NavLink href={filter.href} key={filter.id}>
+                    <span>{filter.name}</span>
+                  </NavLink>
+                ))
+              ) : (
+                <div className="rounded-[10px] px-2.5 py-2 text-sm text-[#6f6759]">No saved filters yet</div>
               )}
             </div>
 

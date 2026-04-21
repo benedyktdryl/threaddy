@@ -119,6 +119,13 @@ export interface IndexRunRow {
   errors: number;
 }
 
+export interface SavedFilterRow {
+  id: string;
+  name: string;
+  href: string;
+  createdAt: string;
+}
+
 function count(db: Database, sql: string): number {
   return Number((db.query(sql).get() as Record<string, unknown>).count);
 }
@@ -255,6 +262,15 @@ export function listProviders(db: Database): Array<{ providerId: string; count: 
      GROUP BY provider_id
      ORDER BY count DESC, provider_id ASC`,
   ).all() as Array<{ providerId: string; count: number }>;
+}
+
+export function listSavedFilters(db: Database, limit = 10): SavedFilterRow[] {
+  return db.query(
+    `SELECT id, name, href, created_at AS createdAt
+     FROM saved_filters
+     ORDER BY created_at DESC
+     LIMIT ?`,
+  ).all(limit) as SavedFilterRow[];
 }
 
 export function listSourceRoots(db: Database): SourceRootRow[] {

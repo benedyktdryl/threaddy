@@ -53,6 +53,7 @@ type ShellProps = {
   stats: DashboardStats;
   projects: Array<{ projectName: string; count: number }>;
   providers: Array<{ providerId: string; count: number }>;
+  savedFilters: Array<{ id: string; name: string; href: string }>;
 };
 
 export function ThreadsPage(
@@ -74,6 +75,29 @@ export function ThreadsPage(
             Unified thread index across supported providers. Richest detail is currently available for Codex and Claude Code.
           </div>
         </CardSection>
+        {query.provider || query.project || query.status || query.q ? (
+          <CardSection>
+            <form action="/actions/save-filter" className="top-links" method="post">
+              <input name="href" type="hidden" value={`/threads${qs({ ...query, page: 1 })}`} />
+              <input
+                name="name"
+                type="hidden"
+                value={
+                  query.q
+                    ? `Search: ${query.q}`
+                    : query.project
+                      ? `Project: ${query.project}`
+                      : query.provider
+                        ? `Provider: ${query.provider}`
+                        : `Status: ${query.status}`
+                }
+              />
+              <Button type="submit" variant="secondary">
+                Save Current Filter
+              </Button>
+            </form>
+          </CardSection>
+        ) : null}
         <CardSection>
           <form action="/threads" className="kv" method="get">
             <div className="muted">Search</div>
