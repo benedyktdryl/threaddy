@@ -25,6 +25,22 @@ export interface ThreadListItem {
   summary: string | null;
 }
 
+export interface ThreadListQuery {
+  provider?: string | null;
+  project?: string | null;
+  status?: string | null;
+  q?: string | null;
+  page: number;
+  pageSize: number;
+}
+
+export interface ThreadListResult {
+  items: ThreadListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export interface ThreadDetail {
   thread: {
     id: string;
@@ -127,13 +143,62 @@ export function getDashboardStats(db: Database): DashboardStats {
   };
 }
 
-export function listThreads(db: Database, limit = 100): ThreadListItem[] {
-  return db.query(
-    `SELECT id, title, provider_id, project_name, repo_path, updated_at, status, message_count, tool_call_count, summary
+function buildThreadWhere(query: ThreadListQuery): { whereSql: string; params: string[] } {
+  const conditions: string[] = [];
+  const params: string[] = [];
+
+  if (query.provider) {
+    conditions.push("provider_id = ?");
+    params.push(query.provider);
+  }
+
+  if (query.project) {
+    conditions.push("project_name = ?");
+    params.push(query.project);
+  }
+
+  if (query.status) {
+    conditions.push("status = ?");
+    params.push(query.status);
+  }
+
+  if (query.q) {
+    conditions.push("(COALESCE(title, '') LIKE ? OR COALESCE(project_name, '') LIKE ? OR COALESCE(repo_path, '') LIKE ? OR COALESCE(summary, '') LIKE ?)");
+    const value = `%${query.q}%`;
+    params.push(value, value, value, value);
+  }
+
+  return {
+    whereSql: conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "",
+    params,
+  };
+}
+
+export function listThreads(db: Database, query: ThreadListQuery): ThreadListResult {
+  const normalizedPage = Math.max(1, query.page);
+  const normalizedPageSize = Math.min(250, Math.max(25, query.pageSize));
+  const { whereSql, params } = buildThreadWhere(query);
+  const totalRow = db
+    .query(`SELECT COUNT(*) AS count FROM threads ${whereSql}`)
+    .get(...params) as Record<string, unknown>;
+  const total = Number(totalRow.count ?? 0);
+  const offset = (normalizedPage - 1) * normalizedPageSize;
+
+  const items = db.query(
+    `SELECT id, title, provider_id AS providerId, project_name AS projectName, repo_path AS repoPath, updated_at AS updatedAt,
+            status, message_count AS messageCount, tool_call_count AS toolCallCount, summary
      FROM threads
+     ${whereSql}
      ORDER BY updated_at DESC
-     LIMIT ?`,
-  ).all(limit) as ThreadListItem[];
+     LIMIT ? OFFSET ?`,
+  ).all(...params, normalizedPageSize, offset) as ThreadListItem[];
+
+  return {
+    items,
+    total,
+    page: normalizedPage,
+    pageSize: normalizedPageSize,
+  };
 }
 
 export function getThreadDetail(db: Database, threadId: string): ThreadDetail | null {

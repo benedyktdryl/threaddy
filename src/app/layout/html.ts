@@ -141,9 +141,12 @@ export function renderLayout(input: {
             <div class="muted">Last indexed: ${text(lastRunText)}</div>
           </div>
           <div class="actions">
+            <form method="post" action="/actions/reindex" style="margin:0">
+              <button class="button" type="submit">Refresh Index</button>
+            </form>
             <a class="pill" href="/api/stats">JSON stats</a>
             <a class="pill" href="/api/health">Health</a>
-            <a class="button" href="/threads">Threads</a>
+            <a class="button secondary" href="/threads">Threads</a>
           </div>
         </div>
         <div class="cards">
@@ -158,4 +161,3 @@ export function renderLayout(input: {
   </body>
 </html>`;
 }
-
