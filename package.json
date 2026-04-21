@@ -10,7 +10,8 @@
     "doctor": "bun run src/main.ts doctor",
     "stats": "bun run src/main.ts stats",
     "init": "bun run src/main.ts init",
-    "dev": "bun run src/main.ts serve"
+    "dev": "bun run src/main.ts serve",
+    "test": "bun test"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",
