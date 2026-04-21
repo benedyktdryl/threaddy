@@ -20,7 +20,7 @@ import { Table, TableWrap, Td, Th, Tr } from "../components/ui/table";
 import { AppShell } from "../layout/app-shell";
 
 function StatusBadge({ status }: { status: string }) {
-  const className = status === "ok" ? "text-[#2f6a45]" : status === "partial" ? "text-[#8a5a00]" : "text-[#992f2f]";
+  const className = status === "ok" ? "status-ok" : status === "partial" ? "status-partial" : "status-error";
   return <Badge className={className}>{status}</Badge>;
 }
 
@@ -42,7 +42,7 @@ function Notice({ message }: { message?: string | null }) {
   return (
     <Card>
       <CardSection>
-        <Badge className="text-[#2f6a45]">{message}</Badge>
+        <Badge className="notice-badge">{message}</Badge>
       </CardSection>
     </Card>
   );
@@ -313,7 +313,7 @@ function ThreadListPanel({
           </tbody>
         </Table>
       </TableWrap>
-      <CardSection className="flex items-center justify-between gap-3">
+      <CardSection className="pagination-bar">
         <div className="muted">
           Showing {result.items.length} of {result.total} threads
         </div>
@@ -398,7 +398,7 @@ export function ThreadDetailPage(props: ShellProps & { detail: ThreadDetail }): 
           {capabilities.messages === false ? (
             <Card>
               <CardSection>
-                <div className="section-title" style={{ marginBottom: 8 }}>
+                <div className="section-title">
                   Partial transcript support
                 </div>
                 <div className="muted">This provider is indexed as metadata-first. Message bodies may be sparse or unavailable.</div>
@@ -407,7 +407,7 @@ export function ThreadDetailPage(props: ShellProps & { detail: ThreadDetail }): 
           ) : null}
           <Card>
             <CardSection>
-              <h3 className="section-title" style={{ marginBottom: 0 }}>
+              <h3 className="section-title section-title-tight">
                 Counts
               </h3>
             </CardSection>
@@ -428,7 +428,7 @@ export function ThreadDetailPage(props: ShellProps & { detail: ThreadDetail }): 
           </Card>
           <Card>
             <CardSection>
-              <h3 className="section-title" style={{ marginBottom: 0 }}>
+              <h3 className="section-title section-title-tight">
                 Source Artifacts
               </h3>
             </CardSection>
@@ -445,19 +445,19 @@ export function ThreadDetailPage(props: ShellProps & { detail: ThreadDetail }): 
           </Card>
           <Card>
             <CardSection>
-              <h3 className="section-title" style={{ marginBottom: 0 }}>
+              <h3 className="section-title section-title-tight">
                 Metadata
               </h3>
             </CardSection>
             <CardSection>
-              <pre className="mono" style={{ margin: 0, overflow: "auto", whiteSpace: "pre-wrap" }}>
+              <pre className="code-block mono">
                 {JSON.stringify({ capabilities, flags, metadata }, null, 2)}
               </pre>
             </CardSection>
           </Card>
           <Card>
             <CardSection>
-              <h3 className="section-title" style={{ marginBottom: 0 }}>
+              <h3 className="section-title section-title-tight">
                 Parse Issues
               </h3>
             </CardSection>
@@ -528,7 +528,7 @@ export function IssuesPage(props: ShellProps & { rows: ParseIssueRow[] }) {
   return (
     <DiagnosticsTablePage {...props} title="Parse Issues">
       <CardSection>
-        <h3 className="section-title" style={{ marginBottom: 0 }}>
+        <h3 className="section-title section-title-tight">
           Parse Issues
         </h3>
       </CardSection>
@@ -576,7 +576,7 @@ export function RootsPage(props: ShellProps & { rows: SourceRootRow[] }) {
   return (
     <DiagnosticsTablePage {...props} title="Source Roots">
       <CardSection>
-        <h3 className="section-title" style={{ marginBottom: 0 }}>
+        <h3 className="section-title section-title-tight">
           Source Roots
         </h3>
       </CardSection>
@@ -622,7 +622,7 @@ export function RunsPage(props: ShellProps & { rows: IndexRunRow[] }) {
   return (
     <DiagnosticsTablePage {...props} title="Index Runs">
       <CardSection>
-        <h3 className="section-title" style={{ marginBottom: 0 }}>
+        <h3 className="section-title section-title-tight">
           Index Runs
         </h3>
       </CardSection>
@@ -699,7 +699,7 @@ export function SettingsPage(props: ShellProps) {
         </CardSection>
         <CardSection>
           <h3 className="section-title">Effective Config</h3>
-          <pre className="mono" style={{ margin: 0, overflow: "auto", whiteSpace: "pre-wrap" }}>
+          <pre className="code-block mono">
             {JSON.stringify(props.config, null, 2)}
           </pre>
         </CardSection>
