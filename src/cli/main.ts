@@ -3,7 +3,9 @@ import type { Database } from "bun:sqlite";
 import { initDefaultConfig, loadConfig } from "../core/config/load-config";
 import { logger } from "../core/logging/logger";
 import { openDatabase } from "../db/client";
+import { getDashboardStats } from "../db/repos/query-service";
 import { runIndex, scanProviders } from "../indexer/pipeline/indexer";
+import { createRouter } from "../app/server/router";
 
 function printHelp(): void {
   process.stdout.write(`threaddy commands:
@@ -65,19 +67,7 @@ async function commandReindex(cwd: string, providerId?: "codex" | "claude-code" 
 
 async function commandStats(cwd: string): Promise<void> {
   await withDb(cwd, async (db) => {
-    const counts = {
-      threads: Number((db.query("SELECT COUNT(*) AS count FROM threads").get() as Record<string, unknown>).count),
-      messages: Number((db.query("SELECT COUNT(*) AS count FROM messages").get() as Record<string, unknown>).count),
-      issues: Number((db.query("SELECT COUNT(*) AS count FROM parse_issues").get() as Record<string, unknown>).count),
-      runs: Number((db.query("SELECT COUNT(*) AS count FROM index_runs").get() as Record<string, unknown>).count),
-      lastRun:
-        ((db.query("SELECT started_at, completed_at, status FROM index_runs ORDER BY started_at DESC LIMIT 1").get() as Record<
-          string,
-          unknown
-        > | null) ?? null),
-    };
-
-    printJson(counts);
+    printJson(getDashboardStats(db));
   });
 }
 
@@ -124,115 +114,15 @@ async function commandDoctor(cwd: string, asJson: boolean): Promise<void> {
   });
 }
 
-function renderHtmlPage(title: string, body: string): string {
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>${title}</title>
-    <style>
-      :root { color-scheme: light; }
-      body { font-family: ui-sans-serif, system-ui, sans-serif; margin: 0; background: #f4f1ea; color: #1e1d1a; }
-      main { max-width: 1000px; margin: 0 auto; padding: 32px; }
-      h1 { margin: 0 0 16px; }
-      .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 24px 0; }
-      .card { background: #fffdf8; border: 1px solid #d9d1c4; border-radius: 12px; padding: 16px; }
-      .muted { color: #666053; }
-      table { width: 100%; border-collapse: collapse; background: #fffdf8; border-radius: 12px; overflow: hidden; }
-      th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #e6dece; font-size: 14px; }
-      th { background: #f7f1e6; }
-      code { font-family: ui-monospace, monospace; }
-    </style>
-  </head>
-  <body>
-    <main>${body}</main>
-  </body>
-</html>`;
-}
-
 async function commandServe(cwd: string): Promise<void> {
   const config = await loadConfig(cwd);
   const db = await openDatabase(config.dbPath);
+  const router = createRouter(db, config);
 
   const server = Bun.serve({
     hostname: config.server.host,
     port: config.server.port,
-    fetch(request) {
-      const url = new URL(request.url);
-      if (url.pathname === "/api/health") {
-        return Response.json({ ok: true });
-      }
-
-      if (url.pathname === "/api/stats") {
-        const payload = {
-          threads: Number((db.query("SELECT COUNT(*) AS count FROM threads").get() as Record<string, unknown>).count),
-          messages: Number((db.query("SELECT COUNT(*) AS count FROM messages").get() as Record<string, unknown>).count),
-          issues: Number((db.query("SELECT COUNT(*) AS count FROM parse_issues").get() as Record<string, unknown>).count),
-        };
-
-        return Response.json(payload);
-      }
-
-      const counts = {
-        threads: Number((db.query("SELECT COUNT(*) AS count FROM threads").get() as Record<string, unknown>).count),
-        messages: Number((db.query("SELECT COUNT(*) AS count FROM messages").get() as Record<string, unknown>).count),
-        issues: Number((db.query("SELECT COUNT(*) AS count FROM parse_issues").get() as Record<string, unknown>).count),
-        runs: Number((db.query("SELECT COUNT(*) AS count FROM index_runs").get() as Record<string, unknown>).count),
-      };
-
-      const rows = db.query(
-        "SELECT title, provider_id, project_name, updated_at, status, message_count FROM threads ORDER BY updated_at DESC LIMIT 25",
-      ).all() as Array<Record<string, unknown>>;
-
-      const body = `
-        <h1>Threaddy</h1>
-        <p class="muted">Working server and CLI foundation. Reindex from the CLI, then refresh this page.</p>
-        <div class="grid">
-          <div class="card"><strong>${counts.threads}</strong><div class="muted">Threads</div></div>
-          <div class="card"><strong>${counts.messages}</strong><div class="muted">Messages</div></div>
-          <div class="card"><strong>${counts.issues}</strong><div class="muted">Issues</div></div>
-          <div class="card"><strong>${counts.runs}</strong><div class="muted">Index runs</div></div>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Title</th>
-              <th>Provider</th>
-              <th>Project</th>
-              <th>Updated</th>
-              <th>Status</th>
-              <th>Messages</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${
-              rows.length > 0
-                ? rows
-                    .map(
-                      (row) => `
-                <tr>
-                  <td>${String(row.title ?? "(untitled)")}</td>
-                  <td>${String(row.provider_id ?? "")}</td>
-                  <td>${String(row.project_name ?? "")}</td>
-                  <td>${String(row.updated_at ?? "")}</td>
-                  <td>${String(row.status ?? "")}</td>
-                  <td>${String(row.message_count ?? 0)}</td>
-                </tr>`,
-                    )
-                    .join("")
-                : '<tr><td colspan="6" class="muted">No indexed threads yet. Run <code>bun run src/main.ts reindex</code>.</td></tr>'
-            }
-          </tbody>
-        </table>
-      `;
-
-      return new Response(renderHtmlPage("Threaddy", body), {
-        headers: {
-          "content-type": "text/html; charset=utf-8",
-        },
-      });
-    },
+    fetch: router,
   });
 
   logger.info("server_started", { url: server.url.toString() });
