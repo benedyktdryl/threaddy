@@ -3,6 +3,8 @@ import type { Database } from "bun:sqlite";
 import type { AppConfig } from "../../core/types/domain";
 import {
   getDashboardStats,
+  getProjectSummary,
+  getProviderSummary,
   getThreadDetail,
   listIndexRuns,
   listParseIssues,
@@ -13,7 +15,7 @@ import {
   listThreads,
 } from "../../db/repos/query-service";
 import { runIndex } from "../../indexer/pipeline/indexer";
-import { IssuesPage, NotFoundPage, RootsPage, RunsPage, SettingsPage, ThreadDetailPage, ThreadsPage } from "../routes/pages";
+import { IssuesPage, NotFoundPage, ProjectPage, ProviderPage, RootsPage, RunsPage, SettingsPage, ThreadDetailPage, ThreadsPage } from "../routes/pages";
 import { renderDocument } from "./render";
 
 function jsonResponse(payload: unknown): Response {
@@ -150,12 +152,50 @@ export function createRouter(db: Database, config: AppConfig): (request: Request
 
     if (url.pathname.startsWith("/providers/")) {
       const providerId = decodeURIComponent(url.pathname.replace("/providers/", ""));
-      return Response.redirect(`${url.origin}/threads?provider=${encodeURIComponent(providerId)}`, 302);
+      const summary = getProviderSummary(db, providerId);
+      if (!summary) {
+        return notFoundPage(config, db, url.pathname);
+      }
+      const page = Number.parseInt(url.searchParams.get("page") ?? "1", 10);
+      const pageSize = Number.parseInt(url.searchParams.get("pageSize") ?? "50", 10);
+      return htmlResponse(
+        renderDocument(
+          <ProviderPage
+            config={config}
+            currentPath={url.pathname}
+            projects={listProjects(db)}
+            providers={listProviders(db)}
+            savedFilters={listSavedFilters(db)}
+            summary={summary}
+            threads={listThreads(db, { provider: providerId, project: null, status: null, q: url.searchParams.get("q"), page, pageSize })}
+            stats={getDashboardStats(db)}
+          />,
+        ),
+      );
     }
 
     if (url.pathname.startsWith("/projects/")) {
       const projectName = decodeURIComponent(url.pathname.replace("/projects/", ""));
-      return Response.redirect(`${url.origin}/threads?project=${encodeURIComponent(projectName)}`, 302);
+      const summary = getProjectSummary(db, projectName);
+      if (!summary) {
+        return notFoundPage(config, db, url.pathname);
+      }
+      const page = Number.parseInt(url.searchParams.get("page") ?? "1", 10);
+      const pageSize = Number.parseInt(url.searchParams.get("pageSize") ?? "50", 10);
+      return htmlResponse(
+        renderDocument(
+          <ProjectPage
+            config={config}
+            currentPath={url.pathname}
+            projects={listProjects(db)}
+            providers={listProviders(db)}
+            savedFilters={listSavedFilters(db)}
+            summary={summary}
+            threads={listThreads(db, { provider: null, project: projectName, status: null, q: url.searchParams.get("q"), page, pageSize })}
+            stats={getDashboardStats(db)}
+          />,
+        ),
+      );
     }
 
     if (url.pathname.startsWith("/threads/")) {

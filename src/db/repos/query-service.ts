@@ -126,6 +126,14 @@ export interface SavedFilterRow {
   createdAt: string;
 }
 
+export interface GroupSummaryRow {
+  name: string;
+  count: number;
+  latestUpdatedAt: string | null;
+  okCount: number;
+  partialCount: number;
+}
+
 function count(db: Database, sql: string): number {
   return Number((db.query(sql).get() as Record<string, unknown>).count);
 }
@@ -271,6 +279,32 @@ export function listSavedFilters(db: Database, limit = 10): SavedFilterRow[] {
      ORDER BY created_at DESC
      LIMIT ?`,
   ).all(limit) as SavedFilterRow[];
+}
+
+export function getProviderSummary(db: Database, providerId: string): GroupSummaryRow | null {
+  return db.query(
+    `SELECT provider_id AS name,
+            COUNT(*) AS count,
+            MAX(updated_at) AS latestUpdatedAt,
+            SUM(CASE WHEN status = 'ok' THEN 1 ELSE 0 END) AS okCount,
+            SUM(CASE WHEN status = 'partial' THEN 1 ELSE 0 END) AS partialCount
+     FROM threads
+     WHERE provider_id = ?
+     GROUP BY provider_id`,
+  ).get(providerId) as GroupSummaryRow | null;
+}
+
+export function getProjectSummary(db: Database, projectName: string): GroupSummaryRow | null {
+  return db.query(
+    `SELECT project_name AS name,
+            COUNT(*) AS count,
+            MAX(updated_at) AS latestUpdatedAt,
+            SUM(CASE WHEN status = 'ok' THEN 1 ELSE 0 END) AS okCount,
+            SUM(CASE WHEN status = 'partial' THEN 1 ELSE 0 END) AS partialCount
+     FROM threads
+     WHERE project_name = ?
+     GROUP BY project_name`,
+  ).get(projectName) as GroupSummaryRow | null;
 }
 
 export function listSourceRoots(db: Database): SourceRootRow[] {

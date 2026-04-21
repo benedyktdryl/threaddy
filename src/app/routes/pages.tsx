@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { AppConfig } from "../../core/types/domain";
 import type {
   DashboardStats,
+  GroupSummaryRow,
   IndexRunRow,
   ParseIssueRow,
   SourceRootRow,
@@ -47,6 +48,45 @@ function Notice({ message }: { message?: string | null }) {
   );
 }
 
+function ScopeSummary({
+  label,
+  summary,
+  filterHref,
+}: {
+  label: string;
+  summary: GroupSummaryRow;
+  filterHref: string;
+}) {
+  return (
+    <Card>
+      <CardSection>
+        <div className="top-links">
+          <Badge>{label}</Badge>
+          <Badge>{summary.count} threads</Badge>
+        </div>
+        <h2 className="detail-title">{summary.name}</h2>
+        <div className="muted">Latest update: {summary.latestUpdatedAt ?? "unknown"}</div>
+      </CardSection>
+      <CardSection>
+        <div className="kv">
+          <div className="muted">Healthy</div>
+          <div>{summary.okCount}</div>
+          <div className="muted">Partial</div>
+          <div>{summary.partialCount}</div>
+          <div className="muted">Browse threads</div>
+          <div>
+            <a href={filterHref}>
+              <Button type="button" variant="secondary">
+                Open Filtered List
+              </Button>
+            </a>
+          </div>
+        </div>
+      </CardSection>
+    </Card>
+  );
+}
+
 type ShellProps = {
   config: AppConfig;
   currentPath: string;
@@ -63,175 +103,192 @@ export function ThreadsPage(
     notice?: string | null;
   },
 ): ReactNode {
-  const { result, query, projects, providers } = props;
-  const totalPages = Math.max(1, Math.ceil(result.total / result.pageSize));
-
   return (
     <AppShell {...props} title="All Threads">
       <Notice message={props.notice} />
-      <Card>
+      <ThreadListPanel projects={props.projects} providers={props.providers} query={props.query} result={props.result} />
+    </AppShell>
+  );
+}
+
+function ThreadListPanel({
+  projects,
+  providers,
+  query,
+  result,
+  basePath = "/threads",
+}: {
+  projects: Array<{ projectName: string; count: number }>;
+  providers: Array<{ providerId: string; count: number }>;
+  query: ThreadListQuery;
+  result: ThreadListResult;
+  basePath?: string;
+}) {
+  const totalPages = Math.max(1, Math.ceil(result.total / result.pageSize));
+
+  return (
+    <Card>
+      <CardSection>
+        <div className="muted">
+          Unified thread index across supported providers. Richest detail is currently available for Codex and Claude Code.
+        </div>
+      </CardSection>
+      {query.provider || query.project || query.status || query.q ? (
         <CardSection>
-          <div className="muted">
-            Unified thread index across supported providers. Richest detail is currently available for Codex and Claude Code.
-          </div>
-        </CardSection>
-        {query.provider || query.project || query.status || query.q ? (
-          <CardSection>
-            <form action="/actions/save-filter" className="top-links" method="post">
-              <input name="href" type="hidden" value={`/threads${qs({ ...query, page: 1 })}`} />
-              <input
-                name="name"
-                type="hidden"
-                value={
-                  query.q
-                    ? `Search: ${query.q}`
-                    : query.project
-                      ? `Project: ${query.project}`
-                      : query.provider
-                        ? `Provider: ${query.provider}`
-                        : `Status: ${query.status}`
-                }
-              />
-              <Button type="submit" variant="secondary">
-                Save Current Filter
-              </Button>
-            </form>
-          </CardSection>
-        ) : null}
-        <CardSection>
-          <form action="/threads" className="kv" method="get">
-            <div className="muted">Search</div>
-            <div>
-              <Input defaultValue={query.q ?? ""} name="q" placeholder="title, project, path, summary" />
-            </div>
-            <div className="muted">Provider</div>
-            <div>
-              <Select defaultValue={query.provider ?? ""} name="provider">
-                <option value="">All providers</option>
-                {providers.map((provider) => (
-                  <option key={provider.providerId} value={provider.providerId}>
-                    {provider.providerId}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="muted">Project</div>
-            <div>
-              <Select defaultValue={query.project ?? ""} name="project">
-                <option value="">All projects</option>
-                {projects.map((project) => (
-                  <option key={project.projectName} value={project.projectName}>
-                    {project.projectName}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="muted">Status</div>
-            <div>
-              <Select defaultValue={query.status ?? ""} name="status">
-                <option value="">All statuses</option>
-                {["ok", "partial", "error", "orphaned"].map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div className="muted">Page size</div>
-            <div>
-              <Select defaultValue={String(query.pageSize)} name="pageSize">
-                {[25, 50, 100, 250].map((size) => (
-                  <option key={size} value={size}>
-                    {size}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div />
-            <div className="form-actions">
-              <Button type="submit">Apply Filters</Button>
-              <a href="/threads">
-                <Button type="button" variant="secondary">
-                  Reset
-                </Button>
-              </a>
-            </div>
+          <form action="/actions/save-filter" className="top-links" method="post">
+            <input name="href" type="hidden" value={`${basePath}${qs({ ...query, page: 1 })}`} />
+            <input
+              name="name"
+              type="hidden"
+              value={
+                query.q
+                  ? `Search: ${query.q}`
+                  : query.project
+                    ? `Project: ${query.project}`
+                    : query.provider
+                      ? `Provider: ${query.provider}`
+                      : `Status: ${query.status}`
+              }
+            />
+            <Button type="submit" variant="secondary">
+              Save Current Filter
+            </Button>
           </form>
         </CardSection>
-        <TableWrap>
-          <Table>
-            <thead>
-              <Tr>
-                <Th>Title</Th>
-                <Th>Provider</Th>
-                <Th>Project</Th>
-                <Th>Updated</Th>
-                <Th>Messages</Th>
-                <Th>Tools</Th>
-                <Th>Status</Th>
-              </Tr>
-            </thead>
-            <tbody>
-              {result.items.length > 0 ? (
-                result.items.map((row) => (
-                  <Tr key={row.id}>
-                    <Td>
-                      <a href={`/threads/${row.id}`}>
-                        <strong>{row.title ?? "(untitled)"}</strong>
-                        <div className="muted">{row.summary ?? ""}</div>
-                      </a>
-                    </Td>
-                    <Td>
-                      <a href={`/threads${qs({ ...query, provider: row.providerId, page: 1 })}`}>{row.providerId}</a>
-                    </Td>
-                    <Td>
-                      <a href={`/threads${qs({ ...query, project: row.projectName ?? "", page: 1 })}`}>{row.projectName ?? ""}</a>
-                      <div className="mono muted">{row.repoPath ?? ""}</div>
-                    </Td>
-                    <Td>{row.updatedAt ?? ""}</Td>
-                    <Td>{row.messageCount}</Td>
-                    <Td>{row.toolCallCount}</Td>
-                    <Td>
-                      <StatusBadge status={row.status} />
-                    </Td>
-                  </Tr>
-                ))
-              ) : (
-                <Tr>
-                  <Td className="empty" colSpan={7}>
-                    No indexed threads matched this filter set.
+      ) : null}
+      <CardSection>
+        <form action={basePath} className="kv" method="get">
+          <div className="muted">Search</div>
+          <div>
+            <Input defaultValue={query.q ?? ""} name="q" placeholder="title, project, path, summary" />
+          </div>
+          <div className="muted">Provider</div>
+          <div>
+            <Select defaultValue={query.provider ?? ""} name="provider">
+              <option value="">All providers</option>
+              {providers.map((provider) => (
+                <option key={provider.providerId} value={provider.providerId}>
+                  {provider.providerId}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="muted">Project</div>
+          <div>
+            <Select defaultValue={query.project ?? ""} name="project">
+              <option value="">All projects</option>
+              {projects.map((project) => (
+                <option key={project.projectName} value={project.projectName}>
+                  {project.projectName}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="muted">Status</div>
+          <div>
+            <Select defaultValue={query.status ?? ""} name="status">
+              <option value="">All statuses</option>
+              {["ok", "partial", "error", "orphaned"].map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="muted">Page size</div>
+          <div>
+            <Select defaultValue={String(query.pageSize)} name="pageSize">
+              {[25, 50, 100, 250].map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div />
+          <div className="form-actions">
+            <Button type="submit">Apply Filters</Button>
+            <a href={basePath}>
+              <Button type="button" variant="secondary">
+                Reset
+              </Button>
+            </a>
+          </div>
+        </form>
+      </CardSection>
+      <TableWrap>
+        <Table>
+          <thead>
+            <Tr>
+              <Th>Title</Th>
+              <Th>Provider</Th>
+              <Th>Project</Th>
+              <Th>Updated</Th>
+              <Th>Messages</Th>
+              <Th>Tools</Th>
+              <Th>Status</Th>
+            </Tr>
+          </thead>
+          <tbody>
+            {result.items.length > 0 ? (
+              result.items.map((row) => (
+                <Tr key={row.id}>
+                  <Td>
+                    <a href={`/threads/${row.id}`}>
+                      <strong>{row.title ?? "(untitled)"}</strong>
+                      <div className="muted">{row.summary ?? ""}</div>
+                    </a>
+                  </Td>
+                  <Td>
+                    <a href={`/threads${qs({ ...query, provider: row.providerId, page: 1 })}`}>{row.providerId}</a>
+                  </Td>
+                  <Td>
+                    <a href={`/threads${qs({ ...query, project: row.projectName ?? "", page: 1 })}`}>{row.projectName ?? ""}</a>
+                    <div className="mono muted">{row.repoPath ?? ""}</div>
+                  </Td>
+                  <Td>{row.updatedAt ?? ""}</Td>
+                  <Td>{row.messageCount}</Td>
+                  <Td>{row.toolCallCount}</Td>
+                  <Td>
+                    <StatusBadge status={row.status} />
                   </Td>
                 </Tr>
-              )}
-            </tbody>
-          </Table>
-        </TableWrap>
-        <CardSection className="flex items-center justify-between gap-3">
-          <div className="muted">
-            Showing {result.items.length} of {result.total} threads
-          </div>
-          <div className="top-links">
-            {result.page > 1 ? (
-              <a href={`/threads${qs({ ...query, page: result.page - 1 })}`}>
-                <Button size="sm" type="button" variant="secondary">
-                  Previous
-                </Button>
-              </a>
-            ) : null}
-            <Badge>
-              Page {result.page} of {totalPages}
-            </Badge>
-            {result.page < totalPages ? (
-              <a href={`/threads${qs({ ...query, page: result.page + 1 })}`}>
-                <Button size="sm" type="button" variant="secondary">
-                  Next
-                </Button>
-              </a>
-            ) : null}
-          </div>
-        </CardSection>
-      </Card>
-    </AppShell>
+              ))
+            ) : (
+              <Tr>
+                <Td className="empty" colSpan={7}>
+                  No indexed threads matched this filter set.
+                </Td>
+              </Tr>
+            )}
+          </tbody>
+        </Table>
+      </TableWrap>
+      <CardSection className="flex items-center justify-between gap-3">
+        <div className="muted">
+          Showing {result.items.length} of {result.total} threads
+        </div>
+        <div className="top-links">
+          {result.page > 1 ? (
+            <a href={`${basePath}${qs({ ...query, page: result.page - 1 })}`}>
+              <Button size="sm" type="button" variant="secondary">
+                Previous
+              </Button>
+            </a>
+          ) : null}
+          <Badge>
+            Page {result.page} of {totalPages}
+          </Badge>
+          {result.page < totalPages ? (
+            <a href={`${basePath}${qs({ ...query, page: result.page + 1 })}`}>
+              <Button size="sm" type="button" variant="secondary">
+                Next
+              </Button>
+            </a>
+          ) : null}
+        </div>
+      </CardSection>
+    </Card>
   );
 }
 
@@ -376,6 +433,36 @@ export function ThreadDetailPage(props: ShellProps & { detail: ThreadDetail }): 
           </Card>
         </div>
       </div>
+    </AppShell>
+  );
+}
+
+export function ProviderPage(props: ShellProps & { summary: GroupSummaryRow; threads: ThreadListResult }) {
+  return (
+    <AppShell {...props} title={`Provider · ${props.summary.name}`}>
+      <ScopeSummary label="Provider" summary={props.summary} filterHref={`/threads?provider=${encodeURIComponent(props.summary.name)}`} />
+      <ThreadListPanel
+        basePath={`/providers/${encodeURIComponent(props.summary.name)}`}
+        projects={props.projects}
+        providers={props.providers}
+        query={{ provider: props.summary.name, project: null, status: null, q: null, page: props.threads.page, pageSize: props.threads.pageSize }}
+        result={props.threads}
+      />
+    </AppShell>
+  );
+}
+
+export function ProjectPage(props: ShellProps & { summary: GroupSummaryRow; threads: ThreadListResult }) {
+  return (
+    <AppShell {...props} title={`Project · ${props.summary.name}`}>
+      <ScopeSummary label="Project" summary={props.summary} filterHref={`/threads?project=${encodeURIComponent(props.summary.name)}`} />
+      <ThreadListPanel
+        basePath={`/projects/${encodeURIComponent(props.summary.name)}`}
+        projects={props.projects}
+        providers={props.providers}
+        query={{ provider: null, project: props.summary.name, status: null, q: null, page: props.threads.page, pageSize: props.threads.pageSize }}
+        result={props.threads}
+      />
     </AppShell>
   );
 }
