@@ -64,6 +64,11 @@ function buildThreadQuery(url: URL) {
   };
 }
 
+function withNotice(href: string, notice: string): string {
+  const separator = href.includes("?") ? "&" : "?";
+  return `${href}${separator}notice=${encodeURIComponent(notice)}`;
+}
+
 function renderThreadsPage(config: AppConfig, db: Database, url: URL): string {
   const query = buildThreadQuery(url);
   return renderDocument(
@@ -120,7 +125,26 @@ export function createRouter(db: Database, config: AppConfig): (request: Request
         href,
         new Date().toISOString(),
       );
-      return Response.redirect(`${url.origin}${href}${href.includes("?") ? "&" : "?"}notice=${encodeURIComponent("Filter saved")}`, 303);
+      return Response.redirect(`${url.origin}${withNotice(href, "Filter saved")}`, 303);
+    }
+
+    if (request.method === "POST" && url.pathname.startsWith("/actions/saved-filters/") && url.pathname.endsWith("/rename")) {
+      const filterId = decodeURIComponent(url.pathname.slice("/actions/saved-filters/".length, -"/rename".length));
+      const formData = await request.formData();
+      const redirectTo = String(formData.get("redirectTo") ?? "/threads");
+      const name = String(formData.get("name") ?? "").trim();
+      if (name.length > 0) {
+        db.query("UPDATE saved_filters SET name = ? WHERE id = ?").run(name, filterId);
+      }
+      return Response.redirect(`${url.origin}${withNotice(redirectTo, "Filter renamed")}`, 303);
+    }
+
+    if (request.method === "POST" && url.pathname.startsWith("/actions/saved-filters/") && url.pathname.endsWith("/delete")) {
+      const filterId = decodeURIComponent(url.pathname.slice("/actions/saved-filters/".length, -"/delete".length));
+      const formData = await request.formData();
+      const redirectTo = String(formData.get("redirectTo") ?? "/threads");
+      db.query("DELETE FROM saved_filters WHERE id = ?").run(filterId);
+      return Response.redirect(`${url.origin}${withNotice(redirectTo, "Filter deleted")}`, 303);
     }
 
     if (request.method === "POST" && url.pathname.startsWith("/actions/reindex/provider/")) {

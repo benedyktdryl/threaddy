@@ -143,6 +143,17 @@ export function AppShell({
           .path-list { display: grid; gap: 8px; }
           .path-item { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; }
           .top-links { display: flex; gap: 8px; flex-wrap: wrap; }
+          .saved-filter-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(260px, 360px) auto;
+            gap: 12px;
+            align-items: center;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #e7ddce;
+          }
+          .saved-filter-row:last-child { padding-bottom: 0; border-bottom: 0; }
+          .saved-filter-meta { min-width: 0; }
+          .saved-filter-form { display: flex; gap: 8px; align-items: center; }
           .icon-label { display: inline-flex; align-items: center; gap: 8px; }
           .ui-button {
             display: inline-flex;
@@ -228,6 +239,8 @@ export function AppShell({
             .sidebar { border-right: 0; border-bottom: 1px solid var(--line); }
             .cards, .split { grid-template-columns: 1fr; }
             .header { flex-direction: column; }
+            .saved-filter-row { grid-template-columns: 1fr; }
+            .saved-filter-form { flex-direction: column; align-items: stretch; }
           }
         `}</style>
       </head>

@@ -48,6 +48,54 @@ function Notice({ message }: { message?: string | null }) {
   );
 }
 
+function SavedFiltersManager({
+  currentPath,
+  savedFilters,
+}: {
+  currentPath: string;
+  savedFilters: Array<{ id: string; name: string; href: string }>;
+}) {
+  if (savedFilters.length === 0) {
+    return null;
+  }
+
+  return (
+    <Card>
+      <CardSection>
+        <h3 className="section-title section-title-tight">Saved Filters</h3>
+        <div className="muted">Rename or remove shortcuts without leaving the thread view.</div>
+      </CardSection>
+      <CardSection>
+        <div className="stack">
+          {savedFilters.map((filter) => (
+            <div className="saved-filter-row" key={filter.id}>
+              <div className="saved-filter-meta">
+                <a href={filter.href}>
+                  <strong>{filter.name}</strong>
+                </a>
+                <div className="mono muted">{filter.href}</div>
+              </div>
+              <form action={`/actions/saved-filters/${encodeURIComponent(filter.id)}/rename`} className="saved-filter-form" method="post">
+                <input name="redirectTo" type="hidden" value={currentPath} />
+                <Input aria-label={`Rename ${filter.name}`} defaultValue={filter.name} name="name" />
+                <Button type="submit" variant="secondary">
+                  Rename
+                </Button>
+              </form>
+              <form action={`/actions/saved-filters/${encodeURIComponent(filter.id)}/delete`} method="post">
+                <input name="redirectTo" type="hidden" value={currentPath} />
+                <Button type="submit" variant="ghost">
+                  Delete
+                </Button>
+              </form>
+            </div>
+          ))}
+        </div>
+      </CardSection>
+    </Card>
+  );
+}
+
 function ScopeSummary({
   label,
   summary,
@@ -106,6 +154,7 @@ export function ThreadsPage(
   return (
     <AppShell {...props} title="All Threads">
       <Notice message={props.notice} />
+      <SavedFiltersManager currentPath={props.currentPath} savedFilters={props.savedFilters} />
       <ThreadListPanel projects={props.projects} providers={props.providers} query={props.query} result={props.result} />
     </AppShell>
   );

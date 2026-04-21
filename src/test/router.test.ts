@@ -27,11 +27,11 @@ afterAll(() => {
 });
 
 describe("router actions", () => {
-  test("provider aliases redirect to filtered thread lists", async () => {
+  test("provider pages render provider summaries", async () => {
     const router = createRouter(db, testConfig(dbPath));
     const response = await router(new Request("http://localhost/providers/codex", { redirect: "manual" }));
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("http://localhost/threads?provider=codex");
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("Provider");
   });
 
   test("save-filter action persists a saved filter", async () => {
@@ -51,6 +51,52 @@ describe("router actions", () => {
       | Record<string, unknown>
       | null;
     expect(row?.name).toBe("Provider: codex");
+  });
+
+  test("rename-filter action updates an existing saved filter", async () => {
+    db.query("INSERT INTO saved_filters (id, name, href, created_at) VALUES (?, ?, ?, ?)").run(
+      "filter-1",
+      "Old Name",
+      "/threads?provider=cursor",
+      "2026-04-21T10:00:00Z",
+    );
+    const router = createRouter(db, testConfig(dbPath));
+    const body = new URLSearchParams({ name: "Renamed Filter", redirectTo: "/threads" });
+    const response = await router(
+      new Request("http://localhost/actions/saved-filters/filter-1/rename", {
+        method: "POST",
+        body,
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        redirect: "manual",
+      }),
+    );
+
+    expect(response.status).toBe(303);
+    const row = db.query("SELECT name FROM saved_filters WHERE id = ?").get("filter-1") as Record<string, unknown> | null;
+    expect(row?.name).toBe("Renamed Filter");
+  });
+
+  test("delete-filter action removes a saved filter", async () => {
+    db.query("INSERT INTO saved_filters (id, name, href, created_at) VALUES (?, ?, ?, ?)").run(
+      "filter-2",
+      "Delete Me",
+      "/threads?project=alpha",
+      "2026-04-21T10:00:00Z",
+    );
+    const router = createRouter(db, testConfig(dbPath));
+    const body = new URLSearchParams({ redirectTo: "/threads" });
+    const response = await router(
+      new Request("http://localhost/actions/saved-filters/filter-2/delete", {
+        method: "POST",
+        body,
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        redirect: "manual",
+      }),
+    );
+
+    expect(response.status).toBe(303);
+    const row = db.query("SELECT id FROM saved_filters WHERE id = ?").get("filter-2");
+    expect(row).toBeNull();
   });
 
   test("reindex action redirects after writing a run record", async () => {
