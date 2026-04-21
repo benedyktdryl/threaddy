@@ -104,6 +104,12 @@ function persistBundle(db: Database, bundle: NormalizedThreadBundle): { messages
 
   db.query("DELETE FROM thread_sources WHERE thread_id = ?").run(threadId);
   db.query("INSERT INTO thread_sources (thread_id, source_path, source_role) VALUES (?, ?, ?)").run(threadId, bundle.sourcePath, "primary");
+  if (bundle.sourceArtifacts && bundle.sourceArtifacts.length > 0) {
+    const sourceInsert = db.query("INSERT OR REPLACE INTO thread_sources (thread_id, source_path, source_role) VALUES (?, ?, ?)");
+    for (const artifact of bundle.sourceArtifacts) {
+      sourceInsert.run(threadId, artifact.path, artifact.role);
+    }
+  }
 
   db.query("DELETE FROM messages WHERE thread_id = ?").run(threadId);
   const messageInsert = db.query(
@@ -305,4 +311,3 @@ export async function runIndex(db: Database, config: AppConfig, onlyProviderId?:
     throw error;
   }
 }
-

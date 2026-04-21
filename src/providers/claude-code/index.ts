@@ -49,6 +49,30 @@ function flattenClaudeContent(content: unknown): { text: string | null; kind: "c
   return { text: parts.join("\n\n") || null, kind };
 }
 
+function extractClaudeToolBlocks(content: unknown): Array<{ name: string | null; id: string | null; input: string | null }> {
+  if (!Array.isArray(content)) {
+    return [];
+  }
+
+  const output: Array<{ name: string | null; id: string | null; input: string | null }> = [];
+  for (const block of content) {
+    if (!block || typeof block !== "object") {
+      continue;
+    }
+
+    const typedBlock = block as Record<string, unknown>;
+    if (typedBlock.type === "tool_use") {
+      output.push({
+        name: typeof typedBlock.name === "string" ? typedBlock.name : null,
+        id: typeof typedBlock.id === "string" ? typedBlock.id : null,
+        input: typedBlock.input ? JSON.stringify(typedBlock.input) : null,
+      });
+    }
+  }
+
+  return output;
+}
+
 export const claudeCodeAdapter: ProviderAdapter = {
   id: "claude-code",
   displayName: "Claude Code",
@@ -70,8 +94,16 @@ export const claudeCodeAdapter: ProviderAdapter = {
     let updatedAt: string | null = null;
     const messages: NormalizedMessage[] = [];
     const issues = [];
+    const sourceArtifacts = [{ path: candidate.path, role: "primary" }];
     let ordinal = 0;
     let toolCallCount = 0;
+    const isSubagent = candidate.path.includes("/subagents/");
+    if (isSubagent) {
+      sourceArtifacts.push({
+        path: candidate.path.replace(/\/subagents\/agent-[^/]+\.jsonl$/, ".jsonl"),
+        role: "parent-thread",
+      });
+    }
 
     for (const line of lines) {
       if (!line.value || typeof line.value !== "object") {
@@ -97,19 +129,8 @@ export const claudeCodeAdapter: ProviderAdapter = {
       const message = (record.message as Record<string, unknown> | undefined) ?? {};
       const role = message.role === "assistant" ? "assistant" : message.role === "user" ? "user" : "other";
       const content = flattenClaudeContent(message.content);
-
-      if (Array.isArray(message.content)) {
-        for (const block of message.content) {
-          if (!block || typeof block !== "object") {
-            continue;
-          }
-
-          const typedBlock = block as Record<string, unknown>;
-          if (typedBlock.type === "tool_use") {
-            toolCallCount += 1;
-          }
-        }
-      }
+      const toolBlocks = extractClaudeToolBlocks(message.content);
+      toolCallCount += toolBlocks.length;
 
       messages.push({
         ordinal,
@@ -124,6 +145,24 @@ export const claudeCodeAdapter: ProviderAdapter = {
         parseStatus: "ok",
       });
       ordinal += 1;
+
+      for (const toolBlock of toolBlocks) {
+        messages.push({
+          ordinal,
+          role: "tool",
+          kind: "tool_call",
+          createdAt: updatedAt,
+          contentText: toolBlock.input,
+          contentPreview: toPreview(toolBlock.input, 600),
+          toolName: toolBlock.name,
+          toolCallId: toolBlock.id,
+          sourceMessageId: typeof record.uuid === "string" ? record.uuid : null,
+          sourcePath: candidate.path,
+          sourceOffset: line.line,
+          parseStatus: "ok",
+        });
+        ordinal += 1;
+      }
     }
 
     const summary = buildSummary(messages, 600);
@@ -154,10 +193,13 @@ export const claudeCodeAdapter: ProviderAdapter = {
       flags: {
         hasToolCalls: toolCallCount > 0,
         hasOpaqueTranscript: false,
+        hasSubagents: isSubagent,
       },
       metadata: {
         gitBranch,
+        isSubagent,
       },
+      sourceArtifacts,
       messages,
       issues,
     };
@@ -165,4 +207,3 @@ export const claudeCodeAdapter: ProviderAdapter = {
     return [bundle];
   },
 };
-

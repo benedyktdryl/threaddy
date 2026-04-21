@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { Database } from "bun:sqlite";
@@ -10,7 +9,7 @@ import type {
   NormalizedMessage,
   NormalizedThreadBundle,
 } from "../../core/types/domain";
-import { toPreview } from "../../core/utils/text";
+import { safeJsonParse, toPreview } from "../../core/utils/text";
 import { providerEnabled, listJsonlCandidates, basicShouldReparse, readJsonLines, buildSummary, issue } from "../shared";
 import type { ProviderAdapter } from "../base";
 
@@ -22,6 +21,9 @@ type CodexThreadMeta = {
   git_branch?: string | null;
   model?: string | null;
   source?: string | null;
+  git_origin_url?: string | null;
+  agent_nickname?: string | null;
+  agent_role?: string | null;
 };
 
 function getCodexRoots(config: AppConfig): string[] {
@@ -211,7 +213,11 @@ export const codexAdapter: ProviderAdapter = {
     }
 
     const metadata = metaByThread.get(threadId);
+    const sourceMetadata = typeof metadata?.source === "string" ? metadata.source : null;
+    const parsedSourceMetadata =
+      sourceMetadata && sourceMetadata.trim().startsWith("{") ? safeJsonParse<Record<string, unknown>>(sourceMetadata) : null;
     const summary = buildSummary(messages, 600);
+    const sourceArtifacts = [{ path: candidate.path, role: "primary" }];
 
     const bundle: NormalizedThreadBundle = {
       providerId: "codex",
@@ -239,12 +245,18 @@ export const codexAdapter: ProviderAdapter = {
       flags: {
         hasToolCalls: toolCallCount > 0,
         hasOpaqueTranscript: false,
+        hasSubagents: Boolean(parsedSourceMetadata?.parent_thread_id),
       },
       metadata: {
         gitBranch: metadata?.git_branch ?? null,
         model: metadata?.model ?? null,
-        source: metadata?.source ?? null,
+        source: parsedSourceMetadata ?? metadata?.source ?? null,
+        parentThreadId: parsedSourceMetadata?.parent_thread_id ?? null,
+        agentNickname: parsedSourceMetadata?.agent_nickname ?? null,
+        agentRole: parsedSourceMetadata?.agent_role ?? null,
+        depth: parsedSourceMetadata?.depth ?? null,
       },
+      sourceArtifacts,
       messages,
       issues,
     };
@@ -252,4 +264,3 @@ export const codexAdapter: ProviderAdapter = {
     return [bundle];
   },
 };
-

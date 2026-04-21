@@ -1,7 +1,6 @@
-import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { readFile } from "node:fs/promises";
+import { Database } from "bun:sqlite";
 
 import type { AppConfig, CandidateSource, DiscoveredRoot, ExistingSourceRecord, NormalizedThreadBundle } from "../../core/types/domain";
 import { emptyBundle, issue, providerEnabled } from "../shared";
@@ -26,32 +25,6 @@ type CursorHeader = {
 
 function getCursorRoot(config: AppConfig): string {
   return config.providers.cursor.roots[0] ?? join(homedir(), "Library", "Application Support", "Cursor");
-}
-
-function getWorkspacePath(workspaceId: string | undefined): string | null {
-  if (!workspaceId || workspaceId === "empty-window") {
-    return null;
-  }
-
-  const workspaceFile = join(
-    homedir(),
-    "Library",
-    "Application Support",
-    "Cursor",
-    "User",
-    "workspaceStorage",
-    workspaceId,
-    "workspace.json",
-  );
-
-  try {
-    return readFile(workspaceFile, "utf8").then((raw) => {
-      const parsed = JSON.parse(raw) as { folder?: string };
-      return parsed.folder?.replace(/^file:\/\//, "") ?? null;
-    }) as unknown as string | null;
-  } catch {
-    return null;
-  }
 }
 
 function decodeValue(value: unknown): string | null {
@@ -116,6 +89,35 @@ export const cursorAdapter: ProviderAdapter = {
         const composerValue = decodeValue(composerRow?.value);
         const composerData = safeJsonParse<Record<string, unknown>>(composerValue ?? "");
         const workspacePath = header.workspaceIdentifier?.uri?.fsPath ?? null;
+        const subagentComposerIds = Array.isArray(composerData?.subagentComposerIds)
+          ? (composerData?.subagentComposerIds as unknown[]).map((item) => String(item))
+          : [];
+        const originalFileStates =
+          composerData?.originalFileStates && typeof composerData.originalFileStates === "object"
+            ? Object.keys(composerData.originalFileStates as Record<string, unknown>)
+            : [];
+        const branchName =
+          composerData?.activeBranch && typeof composerData.activeBranch === "object"
+            ? ((composerData.activeBranch as Record<string, unknown>).branchName as string | undefined) ?? null
+            : null;
+        const sourceArtifacts = [
+          { path: candidate.path, role: "primary" },
+          ...(header.workspaceIdentifier?.id
+            ? [
+                {
+                  path: join(
+                    candidate.sourceRootPath,
+                    "User",
+                    "workspaceStorage",
+                    header.workspaceIdentifier.id,
+                    "workspace.json",
+                  ),
+                  role: "workspace",
+                },
+              ]
+            : []),
+          ...originalFileStates.slice(0, 25).map((path) => ({ path, role: "file-snapshot" })),
+        ];
 
         output.push(
           emptyBundle({
@@ -126,14 +128,24 @@ export const cursorAdapter: ProviderAdapter = {
             sourceType: candidate.type,
             title: header.name ?? null,
             cwd: workspacePath,
+            createdAt: typeof header.createdAt === "number" ? new Date(header.createdAt).toISOString() : null,
             updatedAt:
               typeof header.lastUpdatedAt === "number" ? new Date(header.lastUpdatedAt).toISOString() : new Date().toISOString(),
+            summary: header.subtitle ?? null,
+            sourceArtifacts,
             metadata: {
               subtitle: header.subtitle ?? null,
               unifiedMode: header.unifiedMode ?? null,
               forceMode: header.forceMode ?? null,
               workspaceId: header.workspaceIdentifier?.id ?? null,
               filesChangedCount: composerData?.filesChangedCount ?? null,
+              status: composerData?.status ?? null,
+              branchName,
+              subagentComposerIds,
+              originalFileStates,
+              conversationHeaderCount: Array.isArray(composerData?.fullConversationHeadersOnly)
+                ? composerData.fullConversationHeadersOnly.length
+                : 0,
             },
             capabilities: {
               messages: false,
@@ -142,6 +154,7 @@ export const cursorAdapter: ProviderAdapter = {
             },
             flags: {
               hasOpaqueTranscript: true,
+              hasSubagents: subagentComposerIds.length > 0,
             },
             issues: [
               issue(
@@ -184,4 +197,3 @@ export const cursorAdapter: ProviderAdapter = {
     }
   },
 };
-

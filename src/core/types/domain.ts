@@ -101,6 +101,10 @@ export interface NormalizedThreadBundle {
   capabilities: Record<string, boolean>;
   flags: Record<string, boolean>;
   metadata: Record<string, unknown>;
+  sourceArtifacts?: Array<{
+    path: string;
+    role: string;
+  }>;
   messages: NormalizedMessage[];
   issues: ParseIssueInput[];
 }
@@ -125,4 +129,3 @@ export interface IndexRunSummary {
   errors: number;
   notes: string | null;
 }
-

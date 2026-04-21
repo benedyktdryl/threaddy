@@ -140,8 +140,9 @@ export function getThreadDetail(db: Database, threadId: string): ThreadDetail | 
   const thread = db.query(
     `SELECT id, provider_id, provider_thread_id, title, project_name, repo_path, cwd, created_at, updated_at,
             message_count, user_message_count, assistant_message_count, tool_call_count, error_count, status, is_archived,
-            summary, first_user_snippet, last_assistant_snippet, tags_json, capabilities_json, thread_flags_json AS flags_json,
-            metadata_json
+            summary, first_user_snippet AS firstUserSnippet, last_assistant_snippet AS lastAssistantSnippet,
+            tags_json AS tagsJson, capabilities_json AS capabilitiesJson, thread_flags_json AS flagsJson,
+            metadata_json AS metadataJson
      FROM threads
      WHERE id = ?`,
   ).get(threadId) as ThreadDetail["thread"] | null;
@@ -216,4 +217,3 @@ export function listIndexRuns(db: Database, limit = 50): IndexRunRow[] {
      LIMIT ?`,
   ).all(limit) as IndexRunRow[];
 }
-

@@ -164,10 +164,14 @@ export function emptyBundle(input: {
   sourceType: string;
   title?: string | null;
   cwd?: string | null;
+  createdAt?: string | null;
   updatedAt?: string | null;
+  summary?: string | null;
+  status?: "ok" | "partial" | "error" | "orphaned";
   metadata?: Record<string, unknown>;
   capabilities?: Record<string, boolean>;
   flags?: Record<string, boolean>;
+  sourceArtifacts?: Array<{ path: string; role: string }>;
   issues?: ParseIssueInput[];
 }): NormalizedThreadBundle {
   return {
@@ -180,19 +184,19 @@ export function emptyBundle(input: {
     projectName: inferProjectNameFromPath(input.cwd ?? input.sourcePath),
     repoPath: input.cwd ?? null,
     cwd: input.cwd ?? null,
-    createdAt: input.updatedAt ?? null,
+    createdAt: input.createdAt ?? input.updatedAt ?? null,
     updatedAt: input.updatedAt ?? null,
     isArchived: false,
-    status: "partial",
-    summary: null,
+    status: input.status ?? "partial",
+    summary: input.summary ?? null,
     firstUserSnippet: null,
     lastAssistantSnippet: null,
     tags: [],
     capabilities: input.capabilities ?? {},
     flags: input.flags ?? {},
     metadata: input.metadata ?? {},
+    sourceArtifacts: input.sourceArtifacts ?? [],
     messages: [],
     issues: input.issues ?? [],
   };
 }
-
