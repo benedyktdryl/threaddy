@@ -1,0 +1,11 @@
+node_modules/
+.DS_Store
+.env
+.env.local
+.superpowers/
+dist/
+tmp/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+

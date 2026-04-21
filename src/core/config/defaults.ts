@@ -1,0 +1,25 @@
+import type { AppConfig } from "../types/domain";
+
+export const DEFAULT_CONFIG: AppConfig = {
+  dbPath: "~/.local/share/agent-index/index.sqlite",
+  server: {
+    host: "127.0.0.1",
+    port: 4821,
+  },
+  providers: {
+    codex: { enabled: true, roots: [] },
+    claudeCode: { enabled: true, roots: [] },
+    cursor: { enabled: true, roots: [] },
+  },
+  indexing: {
+    messageFts: false,
+    batchSize: 250,
+    maxPreviewLength: 600,
+  },
+  watch: {
+    enabled: false,
+    debounceMs: 1000,
+  },
+  excludes: ["**/node_modules/**", "**/.git/**"],
+};
+

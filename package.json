@@ -1,0 +1,16 @@
+{
+  "name": "threaddy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "serve": "bun run src/main.ts serve",
+    "reindex": "bun run src/main.ts reindex",
+    "scan": "bun run src/main.ts scan",
+    "doctor": "bun run src/main.ts doctor",
+    "stats": "bun run src/main.ts stats",
+    "init": "bun run src/main.ts init",
+    "dev": "bun run src/main.ts serve"
+  }
+}
+
