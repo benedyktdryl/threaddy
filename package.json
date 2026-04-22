@@ -11,6 +11,7 @@
     "stats": "bun run src/main.ts stats",
     "init": "bun run src/main.ts init",
     "dev": "bun run src/main.ts serve",
+    "build:css": "tailwindcss -i ./src/app/styles/globals.css -o ./src/app/assets/app.css",
     "test": "bun test"
   },
   "dependencies": {
@@ -20,5 +21,8 @@
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "tailwind-merge": "^3.5.0"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
   }
 }

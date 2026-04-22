@@ -3,12 +3,12 @@ import type { HTMLAttributes, PropsWithChildren, TableHTMLAttributes, TdHTMLAttr
 import { cn } from "../../lib/utils";
 
 export function TableWrap({ className, children }: PropsWithChildren<{ className?: string }>) {
-  return <div className={cn("ui-table-wrap", className)}>{children}</div>;
+  return <div className={cn("overflow-x-auto", className)}>{children}</div>;
 }
 
 export function Table({ className, children, ...props }: PropsWithChildren<TableHTMLAttributes<HTMLTableElement>>) {
   return (
-    <table className={cn("ui-table", className)} {...props}>
+    <table className={cn("w-full border-collapse", className)} {...props}>
       {children}
     </table>
   );
@@ -16,7 +16,7 @@ export function Table({ className, children, ...props }: PropsWithChildren<Table
 
 export function Th({ className, children, ...props }: PropsWithChildren<ThHTMLAttributes<HTMLTableCellElement>>) {
   return (
-    <th className={cn("ui-th", className)} {...props}>
+    <th className={cn("bg-secondary/70 px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground", className)} {...props}>
       {children}
     </th>
   );
@@ -24,7 +24,7 @@ export function Th({ className, children, ...props }: PropsWithChildren<ThHTMLAt
 
 export function Td({ className, children, ...props }: PropsWithChildren<TdHTMLAttributes<HTMLTableCellElement>>) {
   return (
-    <td className={cn("ui-td", className)} {...props}>
+    <td className={cn("border-b border-border px-4 py-3 align-top text-sm", className)} {...props}>
       {children}
     </td>
   );
@@ -32,7 +32,7 @@ export function Td({ className, children, ...props }: PropsWithChildren<TdHTMLAt
 
 export function Tr({ className, children, ...props }: PropsWithChildren<HTMLAttributes<HTMLTableRowElement>>) {
   return (
-    <tr className={cn("ui-tr", className)} {...props}>
+    <tr className={cn("transition-colors hover:bg-secondary/30", className)} {...props}>
       {children}
     </tr>
   );

@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import { join } from "node:path";
 
 import type { AppConfig } from "../../core/types/domain";
 import {
@@ -164,6 +165,14 @@ export function createRouter(db: Database, config: AppConfig): (request: Request
 
     if (url.pathname === "/api/health") {
       return jsonResponse({ ok: true });
+    }
+
+    if ((request.method === "GET" || request.method === "HEAD") && url.pathname === "/assets/app.css") {
+      return new Response(Bun.file(join(import.meta.dir, "..", "assets", "app.css")), {
+        headers: {
+          "content-type": "text/css; charset=utf-8",
+        },
+      });
     }
 
     if (url.pathname === "/api/stats") {
