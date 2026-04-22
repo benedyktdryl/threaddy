@@ -555,21 +555,21 @@ video {
 }
 
 :root {
-  --background: 42 35% 95%;
-  --foreground: 36 24% 12%;
-  --card: 42 42% 97%;
-  --card-foreground: 36 24% 12%;
-  --primary: 31 49% 34%;
-  --primary-foreground: 39 55% 96%;
-  --secondary: 38 34% 92%;
-  --secondary-foreground: 36 24% 16%;
-  --muted: 38 30% 90%;
-  --muted-foreground: 33 14% 39%;
-  --accent: 41 42% 90%;
-  --accent-foreground: 36 24% 16%;
-  --border: 38 25% 80%;
-  --input: 38 25% 80%;
-  --ring: 31 49% 34%;
+  --background: 40 28% 96%;
+  --foreground: 34 18% 15%;
+  --card: 36 25% 97%;
+  --card-foreground: 34 18% 15%;
+  --primary: 34 52% 40%;
+  --primary-foreground: 40 50% 97%;
+  --secondary: 38 24% 93%;
+  --secondary-foreground: 34 18% 18%;
+  --muted: 38 18% 91%;
+  --muted-foreground: 32 12% 42%;
+  --accent: 40 24% 90%;
+  --accent-foreground: 34 18% 18%;
+  --border: 36 20% 82%;
+  --input: 36 20% 82%;
+  --ring: 34 52% 40%;
   --radius: 1rem;
 }
 
@@ -583,8 +583,8 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-image:
-      radial-gradient(circle at top left, rgba(140, 79, 45, 0.08), transparent 28%),
-      linear-gradient(180deg, rgba(250, 245, 236, 0.95) 0%, rgba(243, 236, 224, 1) 100%);
+      radial-gradient(circle at top left, rgba(159, 117, 56, 0.05), transparent 24%),
+      linear-gradient(180deg, rgba(248, 243, 235, 0.98) 0%, rgba(244, 239, 231, 1) 100%);
 }
 
 a {
@@ -656,12 +656,36 @@ a {
   min-height: 100vh;
 }
 
+.w-\[124px\] {
+  width: 124px;
+}
+
+.w-\[160px\] {
+  width: 160px;
+}
+
+.w-\[180px\] {
+  width: 180px;
+}
+
+.w-\[200px\] {
+  width: 200px;
+}
+
 .w-full {
   width: 100%;
 }
 
 .min-w-0 {
   min-width: 0px;
+}
+
+.min-w-\[240px\] {
+  min-width: 240px;
+}
+
+.flex-1 {
+  flex: 1 1 0%;
 }
 
 .border-collapse {
@@ -719,10 +743,6 @@ a {
 
 .gap-y-2 {
   row-gap: 0.5rem;
-}
-
-.gap-y-3 {
-  row-gap: 0.75rem;
 }
 
 .space-y-2 > :not([hidden]) ~ :not([hidden]) {
@@ -1209,11 +1229,27 @@ a {
 }
 
 @media (min-width: 1280px) {
+  .xl\:max-w-\[320px\] {
+    max-width: 320px;
+  }
+
   .xl\:grid-cols-4 {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .xl\:grid-cols-\[1\.2fr_0\.8fr\] {
     grid-template-columns: 1.2fr 0.8fr;
+  }
+
+  .xl\:flex-row {
+    flex-direction: row;
+  }
+
+  .xl\:items-center {
+    align-items: center;
+  }
+
+  .xl\:justify-between {
+    justify-content: space-between;
   }
 }

@@ -15,7 +15,7 @@ import { stableId } from "../core/utils/ids";
 import { listFilesRecursive, pathExists, safeStat } from "../core/utils/fs";
 import { cleanPromptText, deriveTitleFromPrompt, firstNonEmpty, toPreview } from "../core/utils/text";
 
-export const CURRENT_PARSER_VERSION = 2;
+export const CURRENT_PARSER_VERSION = 3;
 
 export function providerEnabled(providerEnabled: boolean, root: string, providerId: ProviderId): DiscoveredRoot {
   if (!providerEnabled) {

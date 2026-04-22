@@ -181,6 +181,8 @@ function buildThreadWhere(query: ThreadListQuery): { whereSql: string; params: s
   if (query.status) {
     conditions.push("status = ?");
     params.push(query.status);
+  } else {
+    conditions.push("status != 'orphaned'");
   }
 
   if (query.q) {

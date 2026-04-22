@@ -210,6 +210,24 @@ function createRunningIndexRun(db: Database, providers: ProviderId[]): IndexRunS
   return summary;
 }
 
+function reconcileSourceThreads(db: Database, candidate: CandidateSource, bundles: NormalizedThreadBundle[]): void {
+  const activeThreadIds = new Set(bundles.map((bundle) => stableId([bundle.providerId, bundle.providerThreadId])));
+  const rows = db
+    .query("SELECT thread_id FROM thread_sources WHERE source_path = ? AND source_role = 'primary'")
+    .all(candidate.path) as Array<Record<string, unknown>>;
+
+  const staleThreadIds = rows
+    .map((row) => String(row.thread_id))
+    .filter((threadId) => !activeThreadIds.has(threadId));
+
+  if (staleThreadIds.length === 0) {
+    return;
+  }
+
+  const placeholders = staleThreadIds.map(() => "?").join(", ");
+  db.query(`UPDATE threads SET status = 'orphaned', last_indexed_at = ? WHERE id IN (${placeholders})`).run(new Date().toISOString(), ...staleThreadIds);
+}
+
 function finalizeIndexRun(db: Database, summary: IndexRunSummary): void {
   db.query(
     "UPDATE index_runs SET completed_at = ?, status = ?, roots_scanned = ?, files_seen = ?, files_changed = ?, threads_upserted = ?, messages_upserted = ?, errors = ?, notes = ? WHERE id = ?",
@@ -282,6 +300,7 @@ export async function runIndex(db: Database, config: AppConfig, onlyProviderId?:
           try {
             const bundles = await provider.parse(candidate);
             writeSource(db, candidate, contentHash, "ok");
+            reconcileSourceThreads(db, candidate, bundles);
 
             for (const bundle of bundles) {
               const persisted = persistBundle(db, bundle);

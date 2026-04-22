@@ -187,38 +187,17 @@ function ThreadListPanel({
           Unified thread index across supported providers. Richest detail is currently available for Codex and Claude Code.
         </div>
       </CardSection>
-      {query.provider || query.project || query.status || query.q ? (
-        <CardSection>
-          <form action="/actions/save-filter" className="flex flex-wrap gap-2" method="post">
-            <input name="href" type="hidden" value={`${basePath}${qs({ ...query, page: 1 })}`} />
-            <input
-              name="name"
-              type="hidden"
-              value={
-                query.q
-                  ? `Search: ${query.q}`
-                  : query.project
-                    ? `Project: ${query.project}`
-                    : query.provider
-                      ? `Provider: ${query.provider}`
-                      : `Status: ${query.status}`
-              }
-            />
-            <Button type="submit" variant="secondary">
-              Save Current Filter
-            </Button>
-          </form>
-        </CardSection>
-      ) : null}
       <CardSection>
-        <form action={basePath} className="grid grid-cols-[160px_1fr] gap-x-3 gap-y-3 text-sm" method="get">
-          <div className="text-muted-foreground">Search</div>
-          <div>
-            <Input defaultValue={query.q ?? ""} name="q" placeholder="title, initial prompt, project, path" />
-          </div>
-          <div className="text-muted-foreground">Provider</div>
-          <div>
-            <Select defaultValue={query.provider ?? ""} name="provider">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <form
+            action={basePath}
+            className="flex flex-1 flex-wrap items-center gap-2"
+            data-auto-submit="true"
+            method="get"
+          >
+            <input name="page" type="hidden" value="1" />
+            <Input className="min-w-[240px] flex-1 xl:max-w-[320px]" defaultValue={query.q ?? ""} name="q" placeholder="Search title or prompt" />
+            <Select className="w-[180px]" defaultValue={query.provider ?? ""} name="provider">
               <option value="">All providers</option>
               {providers.map((provider) => (
                 <option key={provider.providerId} value={provider.providerId}>
@@ -226,10 +205,7 @@ function ThreadListPanel({
                 </option>
               ))}
             </Select>
-          </div>
-          <div className="text-muted-foreground">Project</div>
-          <div>
-            <Select defaultValue={query.project ?? ""} name="project">
+            <Select className="w-[200px]" defaultValue={query.project ?? ""} name="project">
               <option value="">All projects</option>
               {projects.map((project) => (
                 <option key={project.projectName} value={project.projectName}>
@@ -237,10 +213,7 @@ function ThreadListPanel({
                 </option>
               ))}
             </Select>
-          </div>
-          <div className="text-muted-foreground">Status</div>
-          <div>
-            <Select defaultValue={query.status ?? ""} name="status">
+            <Select className="w-[160px]" defaultValue={query.status ?? ""} name="status">
               <option value="">All statuses</option>
               {["ok", "partial", "error", "orphaned"].map((status) => (
                 <option key={status} value={status}>
@@ -248,27 +221,41 @@ function ThreadListPanel({
                 </option>
               ))}
             </Select>
-          </div>
-          <div className="text-muted-foreground">Page size</div>
-          <div>
-            <Select defaultValue={String(query.pageSize)} name="pageSize">
+            <Select className="w-[124px]" defaultValue={String(query.pageSize)} name="pageSize">
               {[25, 50, 100, 250].map((size) => (
                 <option key={size} value={size}>
                   {size}
                 </option>
               ))}
             </Select>
-          </div>
-          <div />
-          <div className="flex gap-2">
-            <Button type="submit">Apply Filters</Button>
             <a href={basePath}>
               <Button type="button" variant="secondary">
                 Reset
               </Button>
             </a>
-          </div>
-        </form>
+          </form>
+          {query.provider || query.project || query.status || query.q ? (
+            <form action="/actions/save-filter" className="flex items-center gap-2" method="post">
+              <input name="href" type="hidden" value={`${basePath}${qs({ ...query, page: 1 })}`} />
+              <input
+                name="name"
+                type="hidden"
+                value={
+                  query.q
+                    ? `Search: ${query.q}`
+                    : query.project
+                      ? `Project: ${query.project}`
+                      : query.provider
+                        ? `Provider: ${query.provider}`
+                        : `Status: ${query.status}`
+                }
+              />
+              <Button type="submit" variant="secondary">
+                Save Filter
+              </Button>
+            </form>
+          ) : null}
+        </div>
       </CardSection>
       <TableWrap>
         <Table>
@@ -362,7 +349,6 @@ export function ThreadDetailPage(props: ShellProps & { detail: ThreadDetail }): 
               <div className="flex flex-wrap gap-2">
                 <StatusBadge status={props.detail.thread.status} />
                 <Badge>{props.detail.thread.providerId}</Badge>
-                {props.detail.thread.titleSource ? <Badge>{props.detail.thread.titleSource}</Badge> : null}
                 {props.detail.thread.isArchived ? <Badge>archived</Badge> : null}
               </div>
               <h2 className="mt-3 text-3xl font-semibold tracking-tight">{props.detail.thread.title ?? "(untitled)"}</h2>
@@ -380,8 +366,6 @@ export function ThreadDetailPage(props: ShellProps & { detail: ThreadDetail }): 
                 <div>{props.detail.thread.updatedAt ?? ""}</div>
                 <div className="text-muted-foreground">Provider thread ID</div>
                 <div className="font-mono text-xs">{props.detail.thread.providerThreadId}</div>
-                <div className="text-muted-foreground">Prompt source</div>
-                <div>{props.detail.thread.initialPromptSource ?? "unknown"}</div>
               </div>
             </CardSection>
             <CardSection>

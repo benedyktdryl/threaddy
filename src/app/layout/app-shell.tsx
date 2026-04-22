@@ -182,6 +182,30 @@ export function AppShell({
             </main>
           </div>
         </div>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (() => {
+                const forms = document.querySelectorAll("form[data-auto-submit]");
+                for (const form of forms) {
+                  let timer = null;
+                  const submit = () => form.requestSubmit();
+                  for (const element of form.elements) {
+                    if (!(element instanceof HTMLInputElement || element instanceof HTMLSelectElement)) continue;
+                    if (element.name === "q") {
+                      element.addEventListener("input", () => {
+                        window.clearTimeout(timer);
+                        timer = window.setTimeout(submit, 220);
+                      });
+                    } else {
+                      element.addEventListener("change", submit);
+                    }
+                  }
+                }
+              })();
+            `,
+          }}
+        />
       </body>
     </html>
   );

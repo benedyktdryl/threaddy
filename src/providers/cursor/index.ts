@@ -10,6 +10,8 @@ import type { ProviderAdapter } from "../base";
 type CursorHeader = {
   composerId: string;
   name?: string;
+  isDraft?: boolean;
+  isArchived?: boolean;
   createdAt?: number;
   lastUpdatedAt?: number;
   unifiedMode?: string;
@@ -121,6 +123,12 @@ export const cursorAdapter: ProviderAdapter = {
         const composerData = safeJsonParse<Record<string, unknown>>(composerValue ?? "");
         const prompt = readCursorInitialPrompt(db, header.composerId);
         const promptFields = buildPromptFields(prompt.prompt, [], 600);
+        if (header.isDraft) {
+          continue;
+        }
+        if (!header.name?.trim() && !header.subtitle?.trim() && !promptFields.initialPromptPreview) {
+          continue;
+        }
         const workspacePath = header.workspaceIdentifier?.uri?.fsPath ?? null;
         const subagentComposerIds = Array.isArray(composerData?.subagentComposerIds)
           ? (composerData?.subagentComposerIds as unknown[]).map((item) => String(item))
@@ -172,6 +180,7 @@ export const cursorAdapter: ProviderAdapter = {
             sourceArtifacts,
             metadata: {
               subtitle: header.subtitle ?? null,
+              isArchived: header.isArchived ?? false,
               unifiedMode: header.unifiedMode ?? null,
               forceMode: header.forceMode ?? null,
               workspaceId: header.workspaceIdentifier?.id ?? null,
