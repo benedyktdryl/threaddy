@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 
 import type { AppConfig, NormalizedMessage, NormalizedThreadBundle } from "../../core/types/domain";
 import { toPreview } from "../../core/utils/text";
-import { providerEnabled, listJsonlCandidates, basicShouldReparse, readJsonLines, buildSummary, issue } from "../shared";
+import { buildPromptFields, providerEnabled, listJsonlCandidates, basicShouldReparse, readJsonLines, buildSummary, issue } from "../shared";
 import type { ProviderAdapter } from "../base";
 
 function getClaudeRoots(config: AppConfig): string[] {
@@ -73,6 +73,30 @@ function extractClaudeToolBlocks(content: unknown): Array<{ name: string | null;
   return output;
 }
 
+function extractClaudeUserPrompt(content: unknown): string | null {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (!Array.isArray(content)) {
+    return null;
+  }
+
+  const parts: string[] = [];
+  for (const block of content) {
+    if (!block || typeof block !== "object") {
+      continue;
+    }
+
+    const typedBlock = block as Record<string, unknown>;
+    if (typedBlock.type === "text" && typeof typedBlock.text === "string") {
+      parts.push(typedBlock.text);
+    }
+  }
+
+  return parts.join("\n\n") || null;
+}
+
 export const claudeCodeAdapter: ProviderAdapter = {
   id: "claude-code",
   displayName: "Claude Code",
@@ -91,6 +115,8 @@ export const claudeCodeAdapter: ProviderAdapter = {
     let cwd: string | null = null;
     let gitBranch: string | null = null;
     let title: string | null = null;
+    let aiTitle: string | null = null;
+    let initialPrompt: string | null = null;
     let updatedAt: string | null = null;
     const messages: NormalizedMessage[] = [];
     const issues = [];
@@ -118,8 +144,22 @@ export const claudeCodeAdapter: ProviderAdapter = {
       gitBranch = typeof record.gitBranch === "string" ? record.gitBranch : gitBranch;
       sessionId = typeof record.sessionId === "string" ? record.sessionId : sessionId;
 
-      if (type === "ai-title" && typeof record.title === "string") {
-        title = record.title;
+      if (type === "custom-title" && typeof record.customTitle === "string" && record.customTitle.trim()) {
+        title = record.customTitle;
+      }
+
+      if (type === "ai-title" && typeof record.aiTitle === "string" && record.aiTitle.trim()) {
+        aiTitle = record.aiTitle;
+        title ??= record.aiTitle;
+      }
+
+      if (
+        type === "user" &&
+        record.isSidechain === false &&
+        record.parentUuid == null &&
+        !initialPrompt
+      ) {
+        initialPrompt = extractClaudeUserPrompt((record.message as Record<string, unknown> | undefined)?.content);
       }
 
       if (type !== "user" && type !== "assistant") {
@@ -166,6 +206,9 @@ export const claudeCodeAdapter: ProviderAdapter = {
     }
 
     const summary = buildSummary(messages, 600);
+    const promptFields = buildPromptFields(initialPrompt, messages, 600);
+    const resolvedTitle = title ?? aiTitle ?? promptFields.derivedTitle ?? null;
+    const titleSource = title ? "claude:custom-title" : aiTitle ? "claude:ai-title" : "derived:initial_prompt";
 
     const bundle: NormalizedThreadBundle = {
       providerId: "claude-code",
@@ -173,7 +216,8 @@ export const claudeCodeAdapter: ProviderAdapter = {
       sourceRootPath: candidate.sourceRootPath,
       sourcePath: candidate.path,
       sourceType: candidate.type,
-      title: title ?? summary.firstUserSnippet ?? null,
+      title: resolvedTitle,
+      titleSource,
       projectName: cwd ? cwd.split("/").filter(Boolean).at(-1) ?? null : null,
       repoPath: cwd,
       cwd,
@@ -182,7 +226,10 @@ export const claudeCodeAdapter: ProviderAdapter = {
       isArchived: false,
       status: issues.length > 0 ? "partial" : "ok",
       summary: summary.summary,
-      firstUserSnippet: summary.firstUserSnippet,
+      initialPrompt: promptFields.initialPrompt,
+      initialPromptPreview: promptFields.initialPromptPreview,
+      initialPromptSource: promptFields.initialPrompt ? "claude:root-user" : null,
+      firstUserSnippet: promptFields.firstUserSnippet,
       lastAssistantSnippet: summary.lastAssistantSnippet,
       tags: [],
       capabilities: {

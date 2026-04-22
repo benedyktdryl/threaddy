@@ -209,7 +209,7 @@ function ThreadListPanel({
         <form action={basePath} className="kv" method="get">
           <div className="muted">Search</div>
           <div>
-            <Input defaultValue={query.q ?? ""} name="q" placeholder="title, project, path, summary" />
+            <Input defaultValue={query.q ?? ""} name="q" placeholder="title, initial prompt, project, path" />
           </div>
           <div className="muted">Provider</div>
           <div>
@@ -285,7 +285,7 @@ function ThreadListPanel({
                   <Td>
                     <a href={`/threads/${row.id}`}>
                       <strong>{row.title ?? "(untitled)"}</strong>
-                      <div className="muted">{row.summary ?? ""}</div>
+                      <div className="muted">{row.initialPromptPreview ?? row.summary ?? ""}</div>
                     </a>
                   </Td>
                   <Td>
@@ -355,10 +355,11 @@ export function ThreadDetailPage(props: ShellProps & { detail: ThreadDetail }): 
               <div className="top-links">
                 <StatusBadge status={props.detail.thread.status} />
                 <Badge>{props.detail.thread.providerId}</Badge>
+                {props.detail.thread.titleSource ? <Badge>{props.detail.thread.titleSource}</Badge> : null}
                 {props.detail.thread.isArchived ? <Badge>archived</Badge> : null}
               </div>
               <h2 className="detail-title">{props.detail.thread.title ?? "(untitled)"}</h2>
-              <div className="muted">{props.detail.thread.summary ?? ""}</div>
+              <div className="muted">{props.detail.thread.initialPromptPreview ?? props.detail.thread.summary ?? ""}</div>
             </CardSection>
             <CardSection>
               <div className="kv">
@@ -372,7 +373,13 @@ export function ThreadDetailPage(props: ShellProps & { detail: ThreadDetail }): 
                 <div>{props.detail.thread.updatedAt ?? ""}</div>
                 <div className="muted">Provider thread ID</div>
                 <div className="mono">{props.detail.thread.providerThreadId}</div>
+                <div className="muted">Prompt source</div>
+                <div>{props.detail.thread.initialPromptSource ?? "unknown"}</div>
               </div>
+            </CardSection>
+            <CardSection>
+              <h3 className="section-title">Initial Prompt</h3>
+              <div className="timeline-body">{props.detail.thread.initialPrompt ?? "No normalized initial prompt is available for this thread."}</div>
             </CardSection>
             <CardSection>
               <h3 className="section-title">Timeline</h3>

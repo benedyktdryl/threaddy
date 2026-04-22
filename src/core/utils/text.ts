@@ -33,3 +33,37 @@ export function safeJsonParse<T>(value: string): T | null {
   }
 }
 
+export function cleanPromptText(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  let normalized = value.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  normalized = normalized.replace(/^# Files mentioned by the user:\s*/i, "");
+
+  const requestMatch = normalized.match(/## My request for Codex:\s*([\s\S]*)$/i);
+  if (requestMatch?.[1]?.trim()) {
+    normalized = requestMatch[1].trim();
+  }
+
+  normalized = normalized.replace(/\s+/g, " ").trim();
+  return normalized || null;
+}
+
+export function deriveTitleFromPrompt(value: string | null | undefined, maxLength = 72): string | null {
+  const normalized = cleanPromptText(value);
+  if (!normalized) {
+    return null;
+  }
+
+  const concise = normalized
+    .replace(/^https?:\/\/\S+\s*/i, "")
+    .replace(/^[#*\-\s]+/, "")
+    .trim();
+
+  return toPreview(concise || normalized, maxLength);
+}

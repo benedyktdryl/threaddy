@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { Database } from "bun:sqlite";
 
 import type { AppConfig, CandidateSource, DiscoveredRoot, ExistingSourceRecord, NormalizedThreadBundle } from "../../core/types/domain";
-import { emptyBundle, issue, providerEnabled } from "../shared";
+import { buildPromptFields, emptyBundle, issue, providerEnabled } from "../shared";
 import { safeJsonParse } from "../../core/utils/text";
 import type { ProviderAdapter } from "../base";
 
@@ -37,6 +37,37 @@ function decodeValue(value: unknown): string | null {
   }
 
   return null;
+}
+
+function readCursorInitialPrompt(db: Database, composerId: string): { prompt: string | null; source: string | null } {
+  const composerRow = db
+    .query("SELECT value FROM cursorDiskKV WHERE key = ? LIMIT 1")
+    .get(`composerData:${composerId}`) as Record<string, unknown> | null;
+  const composerValue = decodeValue(composerRow?.value);
+  const composerData = safeJsonParse<Record<string, unknown>>(composerValue ?? "");
+  const headers = Array.isArray(composerData?.fullConversationHeadersOnly) ? composerData.fullConversationHeadersOnly : [];
+  const firstHeader = headers[0];
+
+  if (!firstHeader || typeof firstHeader !== "object") {
+    return { prompt: null, source: null };
+  }
+
+  const bubbleId = typeof (firstHeader as Record<string, unknown>).bubbleId === "string" ? String((firstHeader as Record<string, unknown>).bubbleId) : null;
+  if (!bubbleId) {
+    return { prompt: null, source: null };
+  }
+
+  const bubbleRow = db
+    .query("SELECT value FROM cursorDiskKV WHERE key = ? LIMIT 1")
+    .get(`bubbleId:${composerId}:${bubbleId}`) as Record<string, unknown> | null;
+  const bubbleValue = decodeValue(bubbleRow?.value);
+  const bubbleData = safeJsonParse<Record<string, unknown>>(bubbleValue ?? "");
+  const prompt = typeof bubbleData?.text === "string" && bubbleData.text.trim() ? bubbleData.text : null;
+
+  return {
+    prompt,
+    source: prompt ? "cursor:cursorDiskKV:first-bubble" : null,
+  };
 }
 
 export const cursorAdapter: ProviderAdapter = {
@@ -88,6 +119,8 @@ export const cursorAdapter: ProviderAdapter = {
           .get(`composerData:${header.composerId}`) as Record<string, unknown> | null;
         const composerValue = decodeValue(composerRow?.value);
         const composerData = safeJsonParse<Record<string, unknown>>(composerValue ?? "");
+        const prompt = readCursorInitialPrompt(db, header.composerId);
+        const promptFields = buildPromptFields(prompt.prompt, [], 600);
         const workspacePath = header.workspaceIdentifier?.uri?.fsPath ?? null;
         const subagentComposerIds = Array.isArray(composerData?.subagentComposerIds)
           ? (composerData?.subagentComposerIds as unknown[]).map((item) => String(item))
@@ -126,12 +159,16 @@ export const cursorAdapter: ProviderAdapter = {
             sourceRootPath: candidate.sourceRootPath,
             sourcePath: candidate.path,
             sourceType: candidate.type,
-            title: header.name ?? null,
+            title: header.name ?? promptFields.derivedTitle ?? null,
+            titleSource: header.name ? "cursor:composerHeaders.name" : promptFields.derivedTitle ? "derived:initial_prompt" : null,
             cwd: workspacePath,
             createdAt: typeof header.createdAt === "number" ? new Date(header.createdAt).toISOString() : null,
             updatedAt:
               typeof header.lastUpdatedAt === "number" ? new Date(header.lastUpdatedAt).toISOString() : new Date().toISOString(),
-            summary: header.subtitle ?? null,
+            summary: header.subtitle ?? promptFields.initialPromptPreview ?? null,
+            initialPrompt: promptFields.initialPrompt,
+            initialPromptPreview: promptFields.initialPromptPreview,
+            initialPromptSource: prompt.source,
             sourceArtifacts,
             metadata: {
               subtitle: header.subtitle ?? null,

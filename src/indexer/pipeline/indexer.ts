@@ -13,11 +13,17 @@ import type {
 import { newId, stableId } from "../../core/utils/ids";
 import { sha256File } from "../../core/utils/fs";
 import { messageId } from "../../providers/shared";
+import { CURRENT_PARSER_VERSION } from "../../providers/shared";
 import { providerRegistry } from "../../providers/registry";
 
 function getExistingSource(db: Database, sourcePath: string): ExistingSourceRecord | null {
   const row = db
-    .query("SELECT source_path, size, mtime_ms, content_hash FROM sources WHERE source_path = ?")
+    .query(
+      `SELECT s.source_path, s.size, s.mtime_ms, s.content_hash,
+              (SELECT MAX(t.parser_version) FROM thread_sources ts JOIN threads t ON t.id = ts.thread_id WHERE ts.source_path = s.source_path) AS parser_version
+       FROM sources s
+       WHERE s.source_path = ?`,
+    )
     .get(sourcePath) as Record<string, unknown> | null;
 
   if (!row) {
@@ -29,6 +35,7 @@ function getExistingSource(db: Database, sourcePath: string): ExistingSourceReco
     size: Number(row.size),
     mtimeMs: Number(row.mtime_ms),
     contentHash: row.content_hash ? String(row.content_hash) : null,
+    parserVersion: row.parser_version == null ? null : Number(row.parser_version),
   };
 }
 
@@ -70,9 +77,10 @@ function persistBundle(db: Database, bundle: NormalizedThreadBundle): { messages
     `INSERT OR REPLACE INTO threads (
       id, provider_id, provider_thread_id, source_root_path, title, project_name, repo_path, cwd, created_at, updated_at,
       message_count, user_message_count, assistant_message_count, tool_call_count, error_count, status, is_archived,
-      summary, first_user_snippet, last_assistant_snippet, tags_json, capabilities_json, thread_flags_json, metadata_json,
+      summary, initial_prompt, initial_prompt_preview, first_user_snippet, last_assistant_snippet,
+      title_source, initial_prompt_source, tags_json, capabilities_json, thread_flags_json, metadata_json,
       parser_version, last_indexed_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     threadId,
     bundle.providerId,
@@ -92,13 +100,17 @@ function persistBundle(db: Database, bundle: NormalizedThreadBundle): { messages
     bundle.status,
     bundle.isArchived ? 1 : 0,
     bundle.summary,
+    bundle.initialPrompt,
+    bundle.initialPromptPreview,
     bundle.firstUserSnippet,
     bundle.lastAssistantSnippet,
+    bundle.titleSource ?? null,
+    bundle.initialPromptSource ?? null,
     JSON.stringify(bundle.tags),
     JSON.stringify(bundle.capabilities),
     JSON.stringify(bundle.flags),
     JSON.stringify(bundle.metadata),
-    1,
+    CURRENT_PARSER_VERSION,
     now,
   );
 

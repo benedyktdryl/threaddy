@@ -4,17 +4,16 @@ import { Database } from "bun:sqlite";
 
 import type {
   AppConfig,
-  CandidateSource,
-  DiscoveredRoot,
   NormalizedMessage,
   NormalizedThreadBundle,
 } from "../../core/types/domain";
 import { safeJsonParse, toPreview } from "../../core/utils/text";
-import { providerEnabled, listJsonlCandidates, basicShouldReparse, readJsonLines, buildSummary, issue } from "../shared";
+import { buildPromptFields, providerEnabled, listJsonlCandidates, basicShouldReparse, readJsonLines, buildSummary, issue } from "../shared";
 import type { ProviderAdapter } from "../base";
 
 type CodexThreadMeta = {
   title?: string | null;
+  first_user_message?: string | null;
   cwd?: string | null;
   updatedAt?: string | null;
   archived?: number | boolean | null;
@@ -37,7 +36,9 @@ function loadCodexThreadMeta(): Map<string, CodexThreadMeta> {
   try {
     const db = new Database(statePath, { readonly: true });
     const rows = db
-      .query("SELECT id, title, cwd, updated_at, archived, git_branch, model, source FROM threads")
+      .query(
+        "SELECT id, title, first_user_message AS first_user_message, cwd, updated_at AS updatedAt, archived, git_branch, model, source FROM threads",
+      )
       .all() as Array<Record<string, unknown>>;
     for (const row of rows) {
       output.set(String(row.id), row as unknown as CodexThreadMeta);
@@ -95,6 +96,7 @@ export const codexAdapter: ProviderAdapter = {
     let threadId = candidate.path.replace(/^.*-([a-f0-9-]{36})\.jsonl$/i, "$1");
     let cwd: string | null = null;
     let title: string | null = null;
+    let initialPrompt: string | null = null;
     let updatedAt: string | null = null;
     const messages: NormalizedMessage[] = [];
     const issues = [];
@@ -118,11 +120,12 @@ export const codexAdapter: ProviderAdapter = {
       }
 
       if (type === "event_msg" && payload.type === "thread_name_updated") {
-        title = typeof payload.title === "string" ? payload.title : title;
+        title = typeof payload.thread_name === "string" ? payload.thread_name : title;
       }
 
       if (type === "event_msg" && payload.type === "user_message") {
         const text = typeof payload.message === "string" ? payload.message : null;
+        initialPrompt ??= text;
         messages.push({
           ordinal,
           role: "user",
@@ -217,6 +220,7 @@ export const codexAdapter: ProviderAdapter = {
     const parsedSourceMetadata =
       sourceMetadata && sourceMetadata.trim().startsWith("{") ? safeJsonParse<Record<string, unknown>>(sourceMetadata) : null;
     const summary = buildSummary(messages, 600);
+    const promptFields = buildPromptFields(initialPrompt ?? metadata?.first_user_message ?? null, messages, 600);
     const sourceArtifacts = [{ path: candidate.path, role: "primary" }];
 
     const bundle: NormalizedThreadBundle = {
@@ -225,7 +229,8 @@ export const codexAdapter: ProviderAdapter = {
       sourceRootPath: candidate.sourceRootPath,
       sourcePath: candidate.path,
       sourceType: candidate.type,
-      title: title ?? metadata?.title ?? summary.firstUserSnippet ?? null,
+      title: metadata?.title ?? title ?? promptFields.derivedTitle ?? null,
+      titleSource: metadata?.title ? "codex-sqlite:title" : title ? "codex-jsonl:thread_name_updated" : "derived:initial_prompt",
       projectName: cwd ? cwd.split("/").filter(Boolean).at(-1) ?? null : null,
       repoPath: cwd ?? metadata?.cwd ?? null,
       cwd: cwd ?? metadata?.cwd ?? null,
@@ -234,7 +239,10 @@ export const codexAdapter: ProviderAdapter = {
       isArchived: Boolean(metadata?.archived),
       status: issues.length > 0 ? "partial" : "ok",
       summary: summary.summary,
-      firstUserSnippet: summary.firstUserSnippet,
+      initialPrompt: promptFields.initialPrompt,
+      initialPromptPreview: promptFields.initialPromptPreview,
+      initialPromptSource: metadata?.first_user_message ? "codex-sqlite:first_user_message" : initialPrompt ? "codex-jsonl:user_message" : null,
+      firstUserSnippet: promptFields.firstUserSnippet,
       lastAssistantSnippet: summary.lastAssistantSnippet,
       tags: [],
       capabilities: {

@@ -54,6 +54,7 @@ export interface ExistingSourceRecord {
   size: number;
   mtimeMs: number;
   contentHash: string | null;
+  parserVersion: number | null;
 }
 
 export interface NormalizedMessage {
@@ -87,6 +88,7 @@ export interface NormalizedThreadBundle {
   sourcePath: string;
   sourceType: string;
   title: string | null;
+  titleSource?: string | null;
   projectName: string | null;
   repoPath: string | null;
   cwd: string | null;
@@ -95,6 +97,9 @@ export interface NormalizedThreadBundle {
   isArchived: boolean;
   status: ThreadStatus;
   summary: string | null;
+  initialPrompt: string | null;
+  initialPromptPreview: string | null;
+  initialPromptSource?: string | null;
   firstUserSnippet: string | null;
   lastAssistantSnippet: string | null;
   tags: string[];

@@ -13,7 +13,9 @@ import type {
 } from "../core/types/domain";
 import { stableId } from "../core/utils/ids";
 import { listFilesRecursive, pathExists, safeStat } from "../core/utils/fs";
-import { firstNonEmpty, toPreview } from "../core/utils/text";
+import { cleanPromptText, deriveTitleFromPrompt, firstNonEmpty, toPreview } from "../core/utils/text";
+
+export const CURRENT_PARSER_VERSION = 2;
 
 export function providerEnabled(providerEnabled: boolean, root: string, providerId: ProviderId): DiscoveredRoot {
   if (!providerEnabled) {
@@ -77,7 +79,11 @@ export function basicShouldReparse(candidate: CandidateSource, existing: Existin
     return true;
   }
 
-  return candidate.size !== existing.size || Math.floor(candidate.mtimeMs) !== Math.floor(existing.mtimeMs);
+  return (
+    candidate.size !== existing.size ||
+    Math.floor(candidate.mtimeMs) !== Math.floor(existing.mtimeMs) ||
+    existing.parserVersion !== CURRENT_PARSER_VERSION
+  );
 }
 
 export async function readJsonLines(path: string): Promise<Array<{ line: number; raw: string; value: unknown }>> {
@@ -129,6 +135,28 @@ export function buildSummary(messages: NormalizedMessage[], maxPreviewLength: nu
   };
 }
 
+export function buildPromptFields(
+  initialPrompt: string | null | undefined,
+  messages: NormalizedMessage[],
+  maxPreviewLength: number,
+): {
+  initialPrompt: string | null;
+  initialPromptPreview: string | null;
+  firstUserSnippet: string | null;
+  derivedTitle: string | null;
+} {
+  const cleanedPrompt = cleanPromptText(initialPrompt);
+  const firstUser =
+    cleanedPrompt ?? messages.find((message) => message.role === "user" && message.contentPreview)?.contentPreview ?? null;
+
+  return {
+    initialPrompt: cleanedPrompt,
+    initialPromptPreview: toPreview(cleanedPrompt, maxPreviewLength),
+    firstUserSnippet: toPreview(firstUser, maxPreviewLength),
+    derivedTitle: deriveTitleFromPrompt(cleanedPrompt),
+  };
+}
+
 export function messageId(threadId: string, ordinal: number, sourceMessageId?: string | null): string {
   return stableId([threadId, String(ordinal), sourceMessageId ?? ""]);
 }
@@ -163,10 +191,14 @@ export function emptyBundle(input: {
   sourcePath: string;
   sourceType: string;
   title?: string | null;
+  titleSource?: string | null;
   cwd?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
   summary?: string | null;
+  initialPrompt?: string | null;
+  initialPromptPreview?: string | null;
+  initialPromptSource?: string | null;
   status?: "ok" | "partial" | "error" | "orphaned";
   metadata?: Record<string, unknown>;
   capabilities?: Record<string, boolean>;
@@ -181,6 +213,7 @@ export function emptyBundle(input: {
     sourcePath: input.sourcePath,
     sourceType: input.sourceType,
     title: input.title ?? null,
+    titleSource: input.titleSource ?? null,
     projectName: inferProjectNameFromPath(input.cwd ?? input.sourcePath),
     repoPath: input.cwd ?? null,
     cwd: input.cwd ?? null,
@@ -189,6 +222,9 @@ export function emptyBundle(input: {
     isArchived: false,
     status: input.status ?? "partial",
     summary: input.summary ?? null,
+    initialPrompt: input.initialPrompt ?? null,
+    initialPromptPreview: input.initialPromptPreview ?? null,
+    initialPromptSource: input.initialPromptSource ?? null,
     firstUserSnippet: null,
     lastAssistantSnippet: null,
     tags: [],

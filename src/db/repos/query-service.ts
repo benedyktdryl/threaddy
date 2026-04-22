@@ -15,6 +15,7 @@ export interface DashboardStats {
 export interface ThreadListItem {
   id: string;
   title: string | null;
+  titleSource: string | null;
   providerId: string;
   projectName: string | null;
   repoPath: string | null;
@@ -23,6 +24,7 @@ export interface ThreadListItem {
   messageCount: number;
   toolCallCount: number;
   summary: string | null;
+  initialPromptPreview: string | null;
 }
 
 export interface ThreadListQuery {
@@ -60,6 +62,10 @@ export interface ThreadDetail {
     status: string;
     isArchived: boolean;
     summary: string | null;
+    initialPrompt: string | null;
+    initialPromptPreview: string | null;
+    titleSource: string | null;
+    initialPromptSource: string | null;
     firstUserSnippet: string | null;
     lastAssistantSnippet: string | null;
     tagsJson: string | null;
@@ -178,9 +184,11 @@ function buildThreadWhere(query: ThreadListQuery): { whereSql: string; params: s
   }
 
   if (query.q) {
-    conditions.push("(COALESCE(title, '') LIKE ? OR COALESCE(project_name, '') LIKE ? OR COALESCE(repo_path, '') LIKE ? OR COALESCE(summary, '') LIKE ?)");
+    conditions.push(
+      "(COALESCE(title, '') LIKE ? OR COALESCE(initial_prompt, '') LIKE ? OR COALESCE(project_name, '') LIKE ? OR COALESCE(repo_path, '') LIKE ? OR COALESCE(summary, '') LIKE ?)",
+    );
     const value = `%${query.q}%`;
-    params.push(value, value, value, value);
+    params.push(value, value, value, value, value);
   }
 
   return {
@@ -200,8 +208,9 @@ export function listThreads(db: Database, query: ThreadListQuery): ThreadListRes
   const offset = (normalizedPage - 1) * normalizedPageSize;
 
   const items = db.query(
-    `SELECT id, title, provider_id AS providerId, project_name AS projectName, repo_path AS repoPath, updated_at AS updatedAt,
-            status, message_count AS messageCount, tool_call_count AS toolCallCount, summary
+    `SELECT id, title, title_source AS titleSource, provider_id AS providerId, project_name AS projectName, repo_path AS repoPath, updated_at AS updatedAt,
+            status, message_count AS messageCount, tool_call_count AS toolCallCount, summary,
+            initial_prompt_preview AS initialPromptPreview
      FROM threads
      ${whereSql}
      ORDER BY updated_at DESC
@@ -220,7 +229,9 @@ export function getThreadDetail(db: Database, threadId: string): ThreadDetail | 
   const thread = db.query(
     `SELECT id, provider_id, provider_thread_id, title, project_name, repo_path, cwd, created_at, updated_at,
             message_count, user_message_count, assistant_message_count, tool_call_count, error_count, status, is_archived,
-            summary, first_user_snippet AS firstUserSnippet, last_assistant_snippet AS lastAssistantSnippet,
+            summary, initial_prompt AS initialPrompt, initial_prompt_preview AS initialPromptPreview,
+            title_source AS titleSource, initial_prompt_source AS initialPromptSource,
+            first_user_snippet AS firstUserSnippet, last_assistant_snippet AS lastAssistantSnippet,
             tags_json AS tagsJson, capabilities_json AS capabilitiesJson, thread_flags_json AS flagsJson,
             metadata_json AS metadataJson
      FROM threads
@@ -239,7 +250,7 @@ export function getThreadDetail(db: Database, threadId: string): ThreadDetail | 
             content_text AS contentText, tool_name AS toolName, tool_call_id AS toolCallId
      FROM messages
      WHERE thread_id = ?
-     ORDER BY ordinal
+     ORDER BY CASE WHEN created_at IS NULL THEN 1 ELSE 0 END, created_at DESC, ordinal DESC
      LIMIT 500`,
   ).all(threadId) as ThreadDetail["messages"];
   const issues = db.query(
