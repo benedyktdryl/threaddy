@@ -42,4 +42,3 @@ export async function openDatabase(dbPath: string): Promise<Database> {
 
   return db;
 }
-

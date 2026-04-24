@@ -15,8 +15,24 @@ import {
   listSourceRoots,
   listThreads,
 } from "../../db/repos/query-service";
-import { runIndex } from "../../indexer/pipeline/indexer";
-import { IssuesPage, NotFoundPage, ProjectPage, ProviderPage, RootsPage, RunsPage, SettingsPage, ThreadDetailPage, ThreadsPage } from "../routes/pages";
+import { runIndex, runSemanticOnly } from "../../indexer/pipeline/indexer";
+import { hybridSearch } from "../../semantic-search/retrieval/hybrid-search";
+import { getRelatedThreads } from "../../semantic-search/retrieval/semantic-search";
+import { getSemanticDiagnostics } from "../../semantic-search/storage/chunk-store";
+import type { SearchMode } from "../../semantic-search/types/index";
+import {
+  IssuesPage,
+  NotFoundPage,
+  ProjectPage,
+  ProviderPage,
+  RootsPage,
+  RunsPage,
+  SearchPage,
+  SemanticDiagnosticsPage,
+  SettingsPage,
+  ThreadDetailPage,
+  ThreadsPage,
+} from "../routes/pages";
 import { renderDocument } from "./render";
 
 function jsonResponse(payload: unknown): Response {
@@ -87,24 +103,6 @@ function renderThreadsPage(config: AppConfig, db: Database, url: URL): string {
   );
 }
 
-function renderThreadDetailPage(config: AppConfig, db: Database, threadId: string): string | null {
-  const detail = getThreadDetail(db, threadId);
-  if (!detail) {
-    return null;
-  }
-
-  return renderDocument(
-    <ThreadDetailPage
-      config={config}
-      currentPath="/threads"
-      detail={detail}
-      projects={listProjects(db)}
-      providers={listProviders(db)}
-      savedFilters={listSavedFilters(db)}
-      stats={getDashboardStats(db)}
-    />,
-  );
-}
 
 export function createRouter(db: Database, config: AppConfig): (request: Request) => Promise<Response> {
   return async (request) => {
@@ -113,6 +111,14 @@ export function createRouter(db: Database, config: AppConfig): (request: Request
     if (request.method === "POST" && url.pathname === "/actions/reindex") {
       await runIndex(db, config);
       return Response.redirect(`${url.origin}/threads?notice=${encodeURIComponent("Index refreshed")}`, 303);
+    }
+
+    if (request.method === "POST" && url.pathname === "/actions/reindex-semantic") {
+      await runSemanticOnly(db, config);
+      return Response.redirect(
+        `${url.origin}/diagnostics/semantic?notice=${encodeURIComponent("Semantic index refreshed")}`,
+        303,
+      );
     }
 
     if (request.method === "POST" && url.pathname === "/actions/save-filter") {
@@ -179,6 +185,17 @@ export function createRouter(db: Database, config: AppConfig): (request: Request
       return jsonResponse(getDashboardStats(db));
     }
 
+    if (url.pathname === "/api/search") {
+      const q = url.searchParams.get("q") ?? "";
+      const mode = (url.searchParams.get("mode") ?? config.semanticSearch.mode) as SearchMode;
+      const provider = url.searchParams.get("provider");
+      const project = url.searchParams.get("project");
+      const limit = Math.min(50, Math.max(5, Number.parseInt(url.searchParams.get("limit") ?? "20", 10)));
+      if (!q.trim()) return jsonResponse({ results: [] });
+      const results = await hybridSearch(db, q, mode, config.semanticSearch.model, limit, provider, project);
+      return jsonResponse({ results, mode, q });
+    }
+
     if (url.pathname === "/threads") {
       return htmlResponse(renderThreadsPage(config, db, url));
     }
@@ -229,12 +246,6 @@ export function createRouter(db: Database, config: AppConfig): (request: Request
           />,
         ),
       );
-    }
-
-    if (url.pathname.startsWith("/threads/")) {
-      const threadId = decodeURIComponent(url.pathname.replace("/threads/", ""));
-      const html = renderThreadDetailPage(config, db, threadId);
-      return html ? htmlResponse(html) : notFoundPage(config, db, url.pathname);
     }
 
     if (url.pathname === "/diagnostics/issues") {
@@ -295,6 +306,78 @@ export function createRouter(db: Database, config: AppConfig): (request: Request
             providers={listProviders(db)}
             savedFilters={listSavedFilters(db)}
             stats={getDashboardStats(db)}
+          />,
+        ),
+      );
+    }
+
+    if (url.pathname === "/search") {
+      const q = url.searchParams.get("q") ?? "";
+      const mode = (url.searchParams.get("mode") ?? config.semanticSearch.mode) as SearchMode;
+      const provider = url.searchParams.get("provider");
+      const project = url.searchParams.get("project");
+      const limit = 20;
+      const results = q.trim()
+        ? await hybridSearch(db, q, mode, config.semanticSearch.model, limit, provider, project)
+        : [];
+      return htmlResponse(
+        renderDocument(
+          <SearchPage
+            config={config}
+            currentPath="/search"
+            projects={listProjects(db)}
+            providers={listProviders(db)}
+            savedFilters={listSavedFilters(db)}
+            stats={getDashboardStats(db)}
+            q={q}
+            mode={mode}
+            provider={provider}
+            project={project}
+            results={results}
+            semanticEnabled={config.semanticSearch.enabled}
+          />,
+        ),
+      );
+    }
+
+    if (url.pathname === "/diagnostics/semantic") {
+      const diag = getSemanticDiagnostics(db);
+      return htmlResponse(
+        renderDocument(
+          <SemanticDiagnosticsPage
+            config={config}
+            currentPath="/diagnostics/semantic"
+            projects={listProjects(db)}
+            providers={listProviders(db)}
+            savedFilters={listSavedFilters(db)}
+            stats={getDashboardStats(db)}
+            notice={url.searchParams.get("notice")}
+            chunkCount={diag.chunkCount}
+            embeddingCount={diag.embeddingCount}
+            embeddingModel={config.semanticSearch.model}
+            vectorDbAvailable={true}
+            semanticEnabled={config.semanticSearch.enabled}
+          />,
+        ),
+      );
+    }
+
+    if (url.pathname.startsWith("/threads/")) {
+      const threadId = decodeURIComponent(url.pathname.replace("/threads/", ""));
+      const detail = getThreadDetail(db, threadId);
+      if (!detail) return notFoundPage(config, db, url.pathname);
+      const related = await getRelatedThreads(db, threadId, config.semanticSearch.model, 5);
+      return htmlResponse(
+        renderDocument(
+          <ThreadDetailPage
+            config={config}
+            currentPath="/threads"
+            detail={detail}
+            projects={listProjects(db)}
+            providers={listProviders(db)}
+            savedFilters={listSavedFilters(db)}
+            stats={getDashboardStats(db)}
+            relatedThreads={related}
           />,
         ),
       );

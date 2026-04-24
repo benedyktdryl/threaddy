@@ -50,6 +50,10 @@ function mergeConfig(base: AppConfig, override: Partial<AppConfig>): AppConfig {
       ...(override.watch ?? {}),
     },
     excludes: override.excludes ?? base.excludes,
+    semanticSearch: {
+      ...base.semanticSearch,
+      ...(override.semanticSearch ?? {}),
+    },
   };
 }
 

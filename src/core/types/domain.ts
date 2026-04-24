@@ -10,6 +10,15 @@ export interface ProviderConfig {
   roots: string[];
 }
 
+export interface SemanticSearchConfig {
+  enabled: boolean;
+  model: string;
+  chunkSize: number;
+  chunkOverlap: number;
+  enableFts: boolean;
+  mode: "hybrid" | "semantic" | "keyword";
+}
+
 export interface AppConfig {
   dbPath: string;
   server: {
@@ -31,6 +40,7 @@ export interface AppConfig {
     debounceMs: number;
   };
   excludes: string[];
+  semanticSearch: SemanticSearchConfig;
 }
 
 export interface DiscoveredRoot {

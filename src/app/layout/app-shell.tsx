@@ -82,6 +82,12 @@ export function AppShell({
                     All Threads
                   </span>
                 </NavLink>
+                <NavLink href="/search" active={currentPath === "/search"}>
+                  <span className="inline-flex items-center gap-2">
+                    <Search size={15} />
+                    Semantic Search
+                  </span>
+                </NavLink>
                 <NavLink href="/diagnostics/issues" active={currentPath.startsWith("/diagnostics/issues")}>
                   <span className="inline-flex items-center gap-2">
                     <Activity size={15} />
@@ -98,6 +104,12 @@ export function AppShell({
                   <span className="inline-flex items-center gap-2">
                     <Activity size={15} />
                     Index Runs
+                  </span>
+                </NavLink>
+                <NavLink href="/diagnostics/semantic" active={currentPath.startsWith("/diagnostics/semantic")}>
+                  <span className="inline-flex items-center gap-2">
+                    <Database size={15} />
+                    Semantic Status
                   </span>
                 </NavLink>
                 <NavLink href="/settings" active={currentPath.startsWith("/settings")}>

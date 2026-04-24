@@ -15,6 +15,7 @@ import { sha256File } from "../../core/utils/fs";
 import { messageId } from "../../providers/shared";
 import { CURRENT_PARSER_VERSION } from "../../providers/shared";
 import { providerRegistry } from "../../providers/registry";
+import { runSemanticIndex } from "../../semantic-search/indexing/semantic-indexer";
 
 function getExistingSource(db: Database, sourcePath: string): ExistingSourceRecord | null {
   const row = db
@@ -269,6 +270,10 @@ export async function scanProviders(config: AppConfig): Promise<ProviderScanResu
   return output;
 }
 
+export async function runSemanticOnly(db: Database, config: AppConfig, onlyThreadId?: string) {
+  return runSemanticIndex(db, config, onlyThreadId);
+}
+
 export async function runIndex(db: Database, config: AppConfig, onlyProviderId?: ProviderId): Promise<IndexRunSummary> {
   const providers = onlyProviderId ? providerRegistry.filter((provider) => provider.id === onlyProviderId) : providerRegistry;
   const summary = createRunningIndexRun(
@@ -327,6 +332,15 @@ export async function runIndex(db: Database, config: AppConfig, onlyProviderId?:
             );
           }
         }
+      }
+    }
+
+    // Run semantic indexing after regular indexing if enabled
+    if (config.semanticSearch.enabled) {
+      try {
+        await runSemanticIndex(db, config);
+      } catch {
+        // Semantic index failure is non-fatal — regular index is still saved
       }
     }
 

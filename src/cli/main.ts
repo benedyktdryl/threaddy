@@ -4,14 +4,17 @@ import { initDefaultConfig, loadConfig } from "../core/config/load-config";
 import { logger } from "../core/logging/logger";
 import { openDatabase } from "../db/client";
 import { getDashboardStats } from "../db/repos/query-service";
-import { runIndex, scanProviders } from "../indexer/pipeline/indexer";
+import { runIndex, runSemanticOnly, scanProviders } from "../indexer/pipeline/indexer";
+import { hybridSearch } from "../semantic-search/retrieval/hybrid-search";
+import type { SearchMode } from "../semantic-search/types/index";
 import { createRouter } from "../app/server/router";
 
 function printHelp(): void {
   process.stdout.write(`threaddy commands:
   init
   scan [--json]
-  reindex [providerId]
+  reindex [providerId] [--semantic]
+  search "<query>" [--mode=hybrid|semantic|keyword]
   stats
   doctor [--json]
   serve
@@ -54,12 +57,32 @@ async function commandScan(cwd: string, asJson: boolean): Promise<void> {
   printJson(summary);
 }
 
-async function commandReindex(cwd: string, providerId?: "codex" | "claude-code" | "cursor"): Promise<void> {
+async function commandReindex(
+  cwd: string,
+  providerId?: "codex" | "claude-code" | "cursor",
+  semanticOnly = false,
+): Promise<void> {
   const config = await loadConfig(cwd);
   const db = await openDatabase(config.dbPath);
   try {
-    const summary = await runIndex(db, config, providerId);
-    printJson(summary);
+    if (semanticOnly) {
+      const stats = await runSemanticOnly(db, config);
+      printJson(stats);
+    } else {
+      const summary = await runIndex(db, config, providerId);
+      printJson(summary);
+    }
+  } finally {
+    db.close();
+  }
+}
+
+async function commandSearch(cwd: string, query: string, mode: SearchMode): Promise<void> {
+  const config = await loadConfig(cwd);
+  const db = await openDatabase(config.dbPath);
+  try {
+    const results = await hybridSearch(db, query, mode, config.semanticSearch.model, 20);
+    printJson(results);
   } finally {
     db.close();
   }
@@ -130,8 +153,13 @@ async function commandServe(cwd: string): Promise<void> {
 }
 
 export async function runCli(args: string[], cwd: string): Promise<void> {
-  const [command, providerId, maybeFlag] = args;
-  const asJson = providerId === "--json" || maybeFlag === "--json";
+  const [command, ...rest] = args;
+  const flags = rest.filter((a) => a.startsWith("--"));
+  const positional = rest.filter((a) => !a.startsWith("--"));
+  const asJson = flags.includes("--json");
+  const semanticOnly = flags.includes("--semantic");
+  const modeFlag = flags.find((f) => f.startsWith("--mode="));
+  const mode = (modeFlag ? modeFlag.split("=")[1] : "hybrid") as SearchMode;
 
   switch (command) {
     case "init":
@@ -143,8 +171,16 @@ export async function runCli(args: string[], cwd: string): Promise<void> {
     case "reindex":
       await commandReindex(
         cwd,
-        providerId && !providerId.startsWith("--") ? (providerId as "codex" | "claude-code" | "cursor") : undefined,
+        positional[0] && !positional[0].startsWith("--") ? (positional[0] as "codex" | "claude-code" | "cursor") : undefined,
+        semanticOnly,
       );
+      return;
+    case "search":
+      if (!positional[0]) {
+        process.stderr.write("Usage: threaddy search \"<query>\" [--mode=hybrid|semantic|keyword]\n");
+        process.exit(1);
+      }
+      await commandSearch(cwd, positional[0], mode);
       return;
     case "stats":
       await commandStats(cwd);

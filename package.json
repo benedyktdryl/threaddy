@@ -15,11 +15,13 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.8.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "sqlite-vec": "^0.1.9",
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {

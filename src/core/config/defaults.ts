@@ -21,5 +21,13 @@ export const DEFAULT_CONFIG: AppConfig = {
     debounceMs: 1000,
   },
   excludes: ["**/node_modules/**", "**/.git/**"],
+  semanticSearch: {
+    enabled: true,
+    model: "Xenova/all-MiniLM-L6-v2",
+    chunkSize: 800,
+    chunkOverlap: 120,
+    enableFts: true,
+    mode: "hybrid",
+  },
 };
 

@@ -11,6 +11,8 @@ import type {
   ThreadListQuery,
   ThreadListResult,
 } from "../../db/repos/query-service";
+import { searchResultHeadline } from "../../semantic-search/format-search-display";
+import type { SearchResult, SearchMode } from "../../semantic-search/types/index";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card, CardSection } from "../components/ui/card";
@@ -335,7 +337,7 @@ function ThreadListPanel({
   );
 }
 
-export function ThreadDetailPage(props: ShellProps & { detail: ThreadDetail }): ReactNode {
+export function ThreadDetailPage(props: ShellProps & { detail: ThreadDetail; relatedThreads?: SearchResult[] }): ReactNode {
   const capabilities = props.detail.thread.capabilitiesJson ? (JSON.parse(props.detail.thread.capabilitiesJson) as Record<string, boolean>) : {};
   const metadata = props.detail.thread.metadataJson ? (JSON.parse(props.detail.thread.metadataJson) as Record<string, unknown>) : {};
   const flags = props.detail.thread.flagsJson ? (JSON.parse(props.detail.thread.flagsJson) as Record<string, boolean>) : {};
@@ -455,6 +457,32 @@ export function ThreadDetailPage(props: ShellProps & { detail: ThreadDetail }): 
               </pre>
             </CardSection>
           </Card>
+          {props.relatedThreads && props.relatedThreads.length > 0 ? (
+            <Card>
+              <CardSection>
+                <h3 className="text-lg font-semibold tracking-tight">Related Conversations</h3>
+                <div className="mt-1 text-sm text-muted-foreground">Semantically similar threads</div>
+              </CardSection>
+              <CardSection>
+                <div className="grid gap-3">
+                  {props.relatedThreads.map((r) => (
+                    <a className="block rounded-2xl bg-secondary/60 px-3 py-3 hover:bg-secondary/80" href={`/threads/${r.threadId}`} key={r.threadId}>
+                      <div className="text-sm font-normal leading-snug">
+                        {searchResultHeadline(r.threadTitle, r.initialPromptPreview, r.firstUserSnippet)}
+                      </div>
+                      {r.projectName ? <div className="mt-1 text-xs text-muted-foreground">{r.projectName}</div> : null}
+                      {r.contentPreview ? (
+                        <div className="mt-1 line-clamp-2 text-xs font-normal text-muted-foreground">{r.contentPreview}</div>
+                      ) : null}
+                      <div className="mt-1 font-mono text-xs text-muted-foreground">
+                        {r.provider} · score {r.score.toFixed(2)}
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </CardSection>
+            </Card>
+          ) : null}
           <Card>
             <CardSection>
               <h3 className="text-lg font-semibold tracking-tight">
@@ -720,6 +748,147 @@ export function NotFoundPage(props: ShellProps) {
       <Card>
         <CardSection>
           <div className="empty">The requested page was not found.</div>
+        </CardSection>
+      </Card>
+    </AppShell>
+  );
+}
+
+export function SearchPage(
+  props: ShellProps & {
+    q: string;
+    mode: SearchMode;
+    provider?: string | null;
+    project?: string | null;
+    results: SearchResult[];
+    semanticEnabled: boolean;
+  },
+) {
+  return (
+    <AppShell {...props} title="Semantic Search">
+      <Card>
+        <CardSection>
+          <div className="text-sm text-muted-foreground">
+            {props.semanticEnabled
+              ? "Search across all indexed message content using semantic, keyword, or hybrid retrieval."
+              : "Semantic search is disabled. Showing keyword results only."}
+          </div>
+        </CardSection>
+        <CardSection>
+          <form action="/search" className="flex flex-wrap items-center gap-2" data-auto-submit="true" method="get">
+            <input name="page" type="hidden" value="1" />
+            <Input className="min-w-[280px] flex-1" defaultValue={props.q} name="q" placeholder="Search conversations…" />
+            <Select className="w-[160px]" defaultValue={props.mode} name="mode">
+              <option value="hybrid">Hybrid</option>
+              <option value="semantic">Semantic only</option>
+              <option value="keyword">Keyword only</option>
+            </Select>
+            <Select className="w-[180px]" defaultValue={props.provider ?? ""} name="provider">
+              <option value="">All providers</option>
+              {props.providers.map((p) => (
+                <option key={p.providerId} value={p.providerId}>{p.providerId}</option>
+              ))}
+            </Select>
+            <Select className="w-[200px]" defaultValue={props.project ?? ""} name="project">
+              <option value="">All projects</option>
+              {props.projects.map((p) => (
+                <option key={p.projectName} value={p.projectName}>{p.projectName}</option>
+              ))}
+            </Select>
+          </form>
+        </CardSection>
+        {props.results.length > 0 ? (
+          <div>
+            <CardSection>
+              <div className="text-sm text-muted-foreground">{props.results.length} results for <strong>{props.q}</strong></div>
+            </CardSection>
+            <div className="divide-y divide-border">
+              {props.results.map((r) => (
+                <div className="px-5 py-4" key={r.chunkId}>
+                  <a className="block" href={`/threads/${r.threadId}`}>
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <span className="text-base font-normal leading-tight hover:underline">
+                        {searchResultHeadline(r.threadTitle, r.initialPromptPreview, r.firstUserSnippet)}
+                      </span>
+                      <div className="flex shrink-0 gap-2">
+                        <Badge>{r.matchedBy}</Badge>
+                        <Badge className="font-mono">{r.score.toFixed(2)}</Badge>
+                      </div>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-x-3 text-sm font-normal text-muted-foreground">
+                      <span>{r.provider}</span>
+                      {r.projectName ? <span>{r.projectName}</span> : null}
+                    </div>
+                    {r.contentPreview ? (
+                      <div className="mt-2 rounded-xl bg-secondary/50 px-3 py-2 text-sm font-normal leading-relaxed text-muted-foreground">
+                        {r.contentPreview}
+                      </div>
+                    ) : null}
+                  </a>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : props.q ? (
+          <CardSection>
+            <div className="py-4 text-muted-foreground">No results found for <strong>{props.q}</strong>.</div>
+          </CardSection>
+        ) : null}
+      </Card>
+    </AppShell>
+  );
+}
+
+export function SemanticDiagnosticsPage(
+  props: ShellProps & {
+    notice?: string | null;
+    chunkCount: number;
+    embeddingCount: number;
+    embeddingModel: string;
+    vectorDbAvailable: boolean;
+    semanticEnabled: boolean;
+  },
+) {
+  return (
+    <AppShell {...props} title="Semantic Search Status">
+      {props.notice ? (
+        <Card>
+          <CardSection>
+            <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700">{props.notice}</Badge>
+          </CardSection>
+        </Card>
+      ) : null}
+      <Card>
+        <CardSection>
+          <h3 className="text-lg font-semibold tracking-tight">Semantic Search Status</h3>
+        </CardSection>
+        <CardSection>
+          <div className="grid grid-cols-[200px_1fr] gap-x-3 gap-y-2 text-sm">
+            <div className="text-muted-foreground">Semantic search enabled</div>
+            <div>{props.semanticEnabled ? "Yes" : "No"}</div>
+            <div className="text-muted-foreground">Vector DB (sqlite-vec)</div>
+            <div>
+              <Badge className={props.vectorDbAvailable ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700"}>
+                {props.vectorDbAvailable ? "available" : "unavailable"}
+              </Badge>
+            </div>
+            <div className="text-muted-foreground">Embedding model</div>
+            <div className="font-mono text-xs">{props.embeddingModel}</div>
+            <div className="text-muted-foreground">Chunks indexed</div>
+            <div>{props.chunkCount}</div>
+            <div className="text-muted-foreground">Embeddings stored</div>
+            <div>{props.embeddingCount}</div>
+          </div>
+        </CardSection>
+        <CardSection>
+          <div className="flex flex-wrap gap-2">
+            <form action="/actions/reindex-semantic" method="post">
+              <Button type="submit">Run Semantic Reindex</Button>
+            </form>
+            <a href="/search">
+              <Button type="button" variant="secondary">Open Search</Button>
+            </a>
+          </div>
         </CardSection>
       </Card>
     </AppShell>
