@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import { join } from "node:path";
 
 import type { AppConfig } from "../../core/types/domain";
+import type { SyncManager } from "../../indexer/watcher";
 import {
   getDashboardStats,
   getProjectSummary,
@@ -86,8 +87,15 @@ function withNotice(href: string, notice: string): string {
   return `${href}${separator}notice=${encodeURIComponent(notice)}`;
 }
 
-function renderThreadsPage(config: AppConfig, db: Database, url: URL): string {
+async function renderThreadsPage(config: AppConfig, db: Database, url: URL): Promise<string> {
   const query = buildThreadQuery(url);
+  const previewId = config.ui.previewPane ? (url.searchParams.get("preview") ?? null) : null;
+  const previewDetail = previewId ? getThreadDetail(db, previewId) : null;
+  const relatedThreads =
+    previewDetail && config.semanticSearch.enabled
+      ? await getRelatedThreads(db, previewId!, config.semanticSearch.model, 5)
+      : undefined;
+
   return renderDocument(
     <ThreadsPage
       config={config}
@@ -99,14 +107,28 @@ function renderThreadsPage(config: AppConfig, db: Database, url: URL): string {
       query={query}
       result={listThreads(db, query)}
       stats={getDashboardStats(db)}
+      previewPane={config.ui.previewPane}
+      previewId={previewId}
+      previewDetail={previewDetail}
+      relatedThreads={relatedThreads}
     />,
   );
 }
 
 
-export function createRouter(db: Database, config: AppConfig): (request: Request) => Promise<Response> {
+export function createRouter(db: Database, config: AppConfig, syncManager?: SyncManager): (request: Request) => Promise<Response> {
   return async (request) => {
     const url = new URL(request.url);
+
+    if (url.pathname === "/api/sync/events" && syncManager) {
+      return new Response(syncManager.subscribe(), {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+      });
+    }
 
     if (request.method === "POST" && url.pathname === "/actions/reindex") {
       await runIndex(db, config);
@@ -197,7 +219,7 @@ export function createRouter(db: Database, config: AppConfig): (request: Request
     }
 
     if (url.pathname === "/threads") {
-      return htmlResponse(renderThreadsPage(config, db, url));
+      return htmlResponse(await renderThreadsPage(config, db, url));
     }
 
     if (url.pathname.startsWith("/providers/")) {

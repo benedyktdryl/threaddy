@@ -5,6 +5,7 @@ import { logger } from "../core/logging/logger";
 import { openDatabase } from "../db/client";
 import { getDashboardStats } from "../db/repos/query-service";
 import { runIndex, runSemanticOnly, scanProviders } from "../indexer/pipeline/indexer";
+import { SyncManager } from "../indexer/watcher";
 import { hybridSearch } from "../semantic-search/retrieval/hybrid-search";
 import type { SearchMode } from "../semantic-search/types/index";
 import { createRouter } from "../app/server/router";
@@ -140,7 +141,8 @@ async function commandDoctor(cwd: string, asJson: boolean): Promise<void> {
 async function commandServe(cwd: string): Promise<void> {
   const config = await loadConfig(cwd);
   const db = await openDatabase(config.dbPath);
-  const router = createRouter(db, config);
+  const syncManager = new SyncManager(db, config);
+  const router = createRouter(db, config, syncManager);
 
   const server = Bun.serve({
     hostname: config.server.host,
@@ -150,6 +152,13 @@ async function commandServe(cwd: string): Promise<void> {
 
   logger.info("server_started", { url: server.url.toString() });
   process.stdout.write(`Server running at ${server.url}\n`);
+
+  // Run reindex in background so the server is immediately available
+  syncManager.runSync().catch(() => {});
+
+  if (config.watch.enabled) {
+    await syncManager.startWatcher();
+  }
 }
 
 export async function runCli(args: string[], cwd: string): Promise<void> {
