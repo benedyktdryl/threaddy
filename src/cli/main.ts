@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 
+import { version } from "../../package.json";
 import { initDefaultConfig, loadConfig } from "../core/config/load-config";
 import { logger } from "../core/logging/logger";
 import { openDatabase } from "../db/client";
@@ -11,7 +12,9 @@ import type { SearchMode } from "../semantic-search/types/index";
 import { createRouter } from "../app/server/router";
 
 function printHelp(): void {
-  process.stdout.write(`threaddy commands:
+  process.stdout.write(`threaddy v${version}
+
+Commands:
   init
   scan [--json]
   reindex [providerId] [--semantic]
@@ -171,6 +174,10 @@ export async function runCli(args: string[], cwd: string): Promise<void> {
   const mode = (modeFlag ? modeFlag.split("=")[1] : "hybrid") as SearchMode;
 
   switch (command) {
+    case "--version":
+    case "-v":
+      process.stdout.write(`threaddy v${version}\n`);
+      return;
     case "init":
       await commandInit(cwd);
       return;
