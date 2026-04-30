@@ -1,8 +1,10 @@
 {
   "name": "threaddy",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
+  "bin": {
+    "threaddy": "./dist/threaddy"
+  },
   "scripts": {
     "serve": "bun run src/main.ts serve",
     "reindex": "bun run src/main.ts reindex",
@@ -12,6 +14,11 @@
     "init": "bun run src/main.ts init",
     "dev": "bun run src/main.ts serve",
     "build:css": "tailwindcss -i ./src/app/styles/globals.css -o ./src/app/assets/app.css",
+    "build": "bun run build:css && bun build --compile --target=bun src/main.ts --outfile dist/threaddy",
+    "build:linux-x64": "bun run build:css && bun build --compile --target=bun-linux-x64 src/main.ts --outfile dist/threaddy-linux-x64",
+    "build:linux-arm64": "bun run build:css && bun build --compile --target=bun-linux-arm64 src/main.ts --outfile dist/threaddy-linux-arm64",
+    "build:macos-x64": "bun run build:css && bun build --compile --target=bun-darwin-x64 src/main.ts --outfile dist/threaddy-macos-x64",
+    "build:macos-arm64": "bun run build:css && bun build --compile --target=bun-darwin-arm64 src/main.ts --outfile dist/threaddy-macos-arm64",
     "test": "bun test"
   },
   "dependencies": {
@@ -19,10 +26,11 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.8.0",
+    "marked": "^18.0.2",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "sqlite-vec": "^0.1.9",
-    "tailwind-merge": "^3.5.0"
+    "tailwind-merge": "^3.5.0",
+    "zod": "^4.4.0"
   },
   "devDependencies": {
     "tailwindcss": "^3.4.17"

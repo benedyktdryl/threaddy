@@ -1,8 +1,7 @@
 import { Database } from "bun:sqlite";
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 
 import { ensureParentDir } from "../core/utils/fs";
+import { migrations } from "./migrations/index";
 
 export async function openDatabase(dbPath: string): Promise<Database> {
   await ensureParentDir(dbPath);
@@ -20,19 +19,13 @@ export async function openDatabase(dbPath: string): Promise<Database> {
       .map((row) => String((row as Record<string, unknown>).version)),
   );
 
-  const migrationsDir = join(import.meta.dir, "migrations");
-  const files = readdirSync(migrationsDir).filter((file) => file.endsWith(".sql")).sort();
+  for (const { filename, sql } of migrations) {
+    if (applied.has(filename)) continue;
 
-  for (const file of files) {
-    if (applied.has(file)) {
-      continue;
-    }
-
-    const sql = readFileSync(join(migrationsDir, file), "utf8");
     db.exec("BEGIN");
     try {
       db.exec(sql);
-      db.query("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)").run(file, new Date().toISOString());
+      db.query("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)").run(filename, new Date().toISOString());
       db.exec("COMMIT");
     } catch (error) {
       db.exec("ROLLBACK");

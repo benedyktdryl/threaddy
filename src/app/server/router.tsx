@@ -1,8 +1,13 @@
 import type { Database } from "bun:sqlite";
-import { join } from "node:path";
+import { writeFile, mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
+
+import appCssPath from "../assets/app.css" with { type: "file" };
 
 import type { AppConfig } from "../../core/types/domain";
 import type { SyncManager } from "../../indexer/watcher";
+import { getUserConfigPath } from "../../core/config/load-config";
+import { configSchema, flattenZodErrors } from "../../core/config/config-schema";
 import {
   getDashboardStats,
   getProjectSummary,
@@ -68,18 +73,39 @@ function notFoundPage(config: AppConfig, db: Database, currentPath: string): Res
   });
 }
 
-function buildThreadQuery(url: URL) {
+function buildThreadQuery(url: URL, overrides?: { provider?: string; project?: string }) {
   const page = Number.parseInt(url.searchParams.get("page") ?? "1", 10);
   const pageSize = Number.parseInt(url.searchParams.get("pageSize") ?? "50", 10);
+  const rawSort = url.searchParams.get("sort");
+  const validSorts = ["updatedAt", "messageCount", "toolCallCount", "title"] as const;
+  const sort = validSorts.includes(rawSort as (typeof validSorts)[number]) ? (rawSort as (typeof validSorts)[number]) : null;
+  const rawDir = url.searchParams.get("dir");
+  const dir = rawDir === "asc" ? "asc" : rawDir === "desc" ? "desc" : null;
+  // Default hideSubagents to true unless explicitly set to "0" or "false"
+  const rawHide = url.searchParams.get("hideSubagents");
+  const hideSubagents = rawHide === "0" || rawHide === "false" ? false : true;
 
   return {
-    provider: url.searchParams.get("provider"),
-    project: url.searchParams.get("project"),
+    provider: overrides?.provider ?? url.searchParams.get("provider"),
+    project: overrides?.project ?? url.searchParams.get("project"),
     status: url.searchParams.get("status"),
     q: url.searchParams.get("q"),
     page: Number.isFinite(page) ? page : 1,
     pageSize: Number.isFinite(pageSize) ? pageSize : 50,
+    sort,
+    dir,
+    hideSubagents,
   };
+}
+
+async function resolvePreview(db: Database, config: AppConfig, url: URL) {
+  const previewId = url.searchParams.get("preview") ?? null;
+  const previewDetail = previewId ? getThreadDetail(db, previewId) : null;
+  const relatedThreads =
+    previewDetail && config.semanticSearch.enabled
+      ? await getRelatedThreads(db, previewId!, config.semanticSearch.model, 5)
+      : undefined;
+  return { previewId, previewDetail, relatedThreads };
 }
 
 function withNotice(href: string, notice: string): string {
@@ -89,25 +115,21 @@ function withNotice(href: string, notice: string): string {
 
 async function renderThreadsPage(config: AppConfig, db: Database, url: URL): Promise<string> {
   const query = buildThreadQuery(url);
-  const previewId = config.ui.previewPane ? (url.searchParams.get("preview") ?? null) : null;
-  const previewDetail = previewId ? getThreadDetail(db, previewId) : null;
-  const relatedThreads =
-    previewDetail && config.semanticSearch.enabled
-      ? await getRelatedThreads(db, previewId!, config.semanticSearch.model, 5)
-      : undefined;
-
+  const { previewId, previewDetail, relatedThreads } = await resolvePreview(db, config, url);
+  const shellProps = {
+    config,
+    currentPath: "/threads",
+    projects: listProjects(db),
+    providers: listProviders(db),
+    savedFilters: listSavedFilters(db),
+    stats: getDashboardStats(db),
+  };
   return renderDocument(
     <ThreadsPage
-      config={config}
-      currentPath="/threads"
+      {...shellProps}
       notice={url.searchParams.get("notice")}
-      projects={listProjects(db)}
-      providers={listProviders(db)}
-      savedFilters={listSavedFilters(db)}
       query={query}
       result={listThreads(db, query)}
-      stats={getDashboardStats(db)}
-      previewPane={config.ui.previewPane}
       previewId={previewId}
       previewDetail={previewDetail}
       relatedThreads={relatedThreads}
@@ -176,6 +198,93 @@ export function createRouter(db: Database, config: AppConfig, syncManager?: Sync
       return Response.redirect(`${url.origin}${withNotice(redirectTo, "Filter deleted")}`, 303);
     }
 
+    if (request.method === "POST" && url.pathname === "/actions/save-config") {
+      const formData = await request.formData();
+      const tab = String(formData.get("_tab") ?? "form");
+
+      const shellProps = {
+        config,
+        currentPath: "/settings",
+        projects: listProjects(db),
+        providers: listProviders(db),
+        savedFilters: listSavedFilters(db),
+        stats: getDashboardStats(db),
+      };
+
+      const bool = (v: FormDataEntryValue | null) => v === "1";
+      const str = (v: FormDataEntryValue | null) => String(v ?? "");
+      const splitLines = (v: FormDataEntryValue | null) =>
+        str(v).split("\n").map((s) => s.trim()).filter(Boolean);
+
+      if (tab === "json") {
+        const raw = str(formData.get("rawJson"));
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(raw);
+        } catch (err) {
+          return htmlResponse(renderDocument(
+            <SettingsPage {...shellProps} jsonError={`Invalid JSON: ${(err as Error).message}`} rawJsonValue={raw} />,
+          ));
+        }
+        const result = configSchema.safeParse(parsed);
+        if (!result.success) {
+          const errors = flattenZodErrors(result.error);
+          return htmlResponse(renderDocument(
+            <SettingsPage {...shellProps} jsonError="JSON is valid but config has errors — see fields below" rawJsonValue={raw} validationErrors={errors} />,
+          ));
+        }
+        const configPath = getUserConfigPath();
+        await mkdir(dirname(configPath), { recursive: true });
+        await writeFile(configPath, `${JSON.stringify(result.data, null, 2)}\n`, "utf8");
+        return Response.redirect(`${url.origin}/settings?notice=${encodeURIComponent("Configuration saved — restart to apply changes")}`, 303);
+      }
+
+      // Form tab — build structured input for Zod
+      const formInput = {
+        dbPath: str(formData.get("dbPath")),
+        server: {
+          host: str(formData.get("server.host")),
+          port: str(formData.get("server.port")),
+        },
+        providers: {
+          codex: { enabled: bool(formData.get("providers.codex.enabled")), roots: splitLines(formData.get("providers.codex.roots")) },
+          claudeCode: { enabled: bool(formData.get("providers.claudeCode.enabled")), roots: splitLines(formData.get("providers.claudeCode.roots")) },
+          cursor: { enabled: bool(formData.get("providers.cursor.enabled")), roots: splitLines(formData.get("providers.cursor.roots")) },
+        },
+        indexing: {
+          messageFts: bool(formData.get("indexing.messageFts")),
+          batchSize: str(formData.get("indexing.batchSize")),
+          maxPreviewLength: str(formData.get("indexing.maxPreviewLength")),
+        },
+        watch: {
+          enabled: bool(formData.get("watch.enabled")),
+          debounceMs: str(formData.get("watch.debounceMs")),
+        },
+        excludes: splitLines(formData.get("excludes")),
+        semanticSearch: {
+          enabled: bool(formData.get("semanticSearch.enabled")),
+          model: str(formData.get("semanticSearch.model")),
+          mode: str(formData.get("semanticSearch.mode")),
+          chunkSize: str(formData.get("semanticSearch.chunkSize")),
+          chunkOverlap: str(formData.get("semanticSearch.chunkOverlap")),
+          enableFts: bool(formData.get("semanticSearch.enableFts")),
+        },
+      };
+
+      const result = configSchema.safeParse(formInput);
+      if (!result.success) {
+        const errors = flattenZodErrors(result.error);
+        return htmlResponse(renderDocument(
+          <SettingsPage {...shellProps} validationErrors={errors} flatValues={formInput} />,
+        ));
+      }
+
+      const configPath = getUserConfigPath();
+      await mkdir(dirname(configPath), { recursive: true });
+      await writeFile(configPath, `${JSON.stringify(result.data, null, 2)}\n`, "utf8");
+      return Response.redirect(`${url.origin}/settings?notice=${encodeURIComponent("Configuration saved — restart to apply changes")}`, 303);
+    }
+
     if (request.method === "POST" && url.pathname.startsWith("/actions/reindex/provider/")) {
       const providerId = url.pathname.replace("/actions/reindex/provider/", "");
       if (providerId === "codex" || providerId === "claude-code" || providerId === "cursor") {
@@ -196,7 +305,7 @@ export function createRouter(db: Database, config: AppConfig, syncManager?: Sync
     }
 
     if ((request.method === "GET" || request.method === "HEAD") && url.pathname === "/assets/app.css") {
-      return new Response(Bun.file(join(import.meta.dir, "..", "assets", "app.css")), {
+      return new Response(Bun.file(appCssPath), {
         headers: {
           "content-type": "text/css; charset=utf-8",
         },
@@ -225,49 +334,25 @@ export function createRouter(db: Database, config: AppConfig, syncManager?: Sync
     if (url.pathname.startsWith("/providers/")) {
       const providerId = decodeURIComponent(url.pathname.replace("/providers/", ""));
       const summary = getProviderSummary(db, providerId);
-      if (!summary) {
-        return notFoundPage(config, db, url.pathname);
-      }
-      const page = Number.parseInt(url.searchParams.get("page") ?? "1", 10);
-      const pageSize = Number.parseInt(url.searchParams.get("pageSize") ?? "50", 10);
-      return htmlResponse(
-        renderDocument(
-          <ProviderPage
-            config={config}
-            currentPath={url.pathname}
-            projects={listProjects(db)}
-            providers={listProviders(db)}
-            savedFilters={listSavedFilters(db)}
-            summary={summary}
-            threads={listThreads(db, { provider: providerId, project: null, status: null, q: url.searchParams.get("q"), page, pageSize })}
-            stats={getDashboardStats(db)}
-          />,
-        ),
-      );
+      if (!summary) return notFoundPage(config, db, url.pathname);
+      const query = buildThreadQuery(url, { provider: providerId });
+      const { previewId, previewDetail, relatedThreads } = await resolvePreview(db, config, url);
+      const shellProps = { config, currentPath: url.pathname, projects: listProjects(db), providers: listProviders(db), savedFilters: listSavedFilters(db), stats: getDashboardStats(db) };
+      return htmlResponse(renderDocument(
+        <ProviderPage {...shellProps} summary={summary} threads={listThreads(db, query)} query={query} previewId={previewId} previewDetail={previewDetail} relatedThreads={relatedThreads} />,
+      ));
     }
 
     if (url.pathname.startsWith("/projects/")) {
       const projectName = decodeURIComponent(url.pathname.replace("/projects/", ""));
       const summary = getProjectSummary(db, projectName);
-      if (!summary) {
-        return notFoundPage(config, db, url.pathname);
-      }
-      const page = Number.parseInt(url.searchParams.get("page") ?? "1", 10);
-      const pageSize = Number.parseInt(url.searchParams.get("pageSize") ?? "50", 10);
-      return htmlResponse(
-        renderDocument(
-          <ProjectPage
-            config={config}
-            currentPath={url.pathname}
-            projects={listProjects(db)}
-            providers={listProviders(db)}
-            savedFilters={listSavedFilters(db)}
-            summary={summary}
-            threads={listThreads(db, { provider: null, project: projectName, status: null, q: url.searchParams.get("q"), page, pageSize })}
-            stats={getDashboardStats(db)}
-          />,
-        ),
-      );
+      if (!summary) return notFoundPage(config, db, url.pathname);
+      const query = buildThreadQuery(url, { project: projectName });
+      const { previewId, previewDetail, relatedThreads } = await resolvePreview(db, config, url);
+      const shellProps = { config, currentPath: url.pathname, projects: listProjects(db), providers: listProviders(db), savedFilters: listSavedFilters(db), stats: getDashboardStats(db) };
+      return htmlResponse(renderDocument(
+        <ProjectPage {...shellProps} summary={summary} threads={listThreads(db, query)} query={query} previewId={previewId} previewDetail={previewDetail} relatedThreads={relatedThreads} />,
+      ));
     }
 
     if (url.pathname === "/diagnostics/issues") {
@@ -324,6 +409,7 @@ export function createRouter(db: Database, config: AppConfig, syncManager?: Sync
           <SettingsPage
             config={config}
             currentPath="/settings"
+            notice={url.searchParams.get("notice")}
             projects={listProjects(db)}
             providers={listProviders(db)}
             savedFilters={listSavedFilters(db)}

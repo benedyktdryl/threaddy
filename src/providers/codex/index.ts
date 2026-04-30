@@ -124,6 +124,9 @@ export const codexAdapter: ProviderAdapter = {
       }
 
       if (type === "event_msg" && payload.type === "user_message") {
+        // Capture initialPrompt from the event stream (needed for metadata).
+        // We do NOT push a message here because response_item/message always follows
+        // with identical content — dedup below removes the duplicate if both appear.
         const text = typeof payload.message === "string" ? payload.message : null;
         initialPrompt ??= text;
         messages.push({
@@ -141,22 +144,8 @@ export const codexAdapter: ProviderAdapter = {
         ordinal += 1;
       }
 
-      if (type === "event_msg" && payload.type === "agent_message") {
-        const text = typeof payload.message === "string" ? payload.message : null;
-        messages.push({
-          ordinal,
-          role: "assistant",
-          kind: "event",
-          createdAt: updatedAt,
-          contentText: text,
-          contentPreview: toPreview(text, 600),
-          sourceMessageId: null,
-          sourcePath: candidate.path,
-          sourceOffset: line.line,
-          parseStatus: "ok",
-        });
-        ordinal += 1;
-      }
+      // Skip agent_message events — codex always emits an identical response_item/message
+      // immediately after, so storing both creates duplicate assistant messages.
 
       if (type === "response_item" && payload.type === "message") {
         const role = payload.role === "assistant" ? "assistant" : payload.role === "user" ? "user" : "other";
@@ -219,8 +208,31 @@ export const codexAdapter: ProviderAdapter = {
     const sourceMetadata = typeof metadata?.source === "string" ? metadata.source : null;
     const parsedSourceMetadata =
       sourceMetadata && sourceMetadata.trim().startsWith("{") ? safeJsonParse<Record<string, unknown>>(sourceMetadata) : null;
-    const summary = buildSummary(messages, 600);
-    const promptFields = buildPromptFields(initialPrompt ?? metadata?.first_user_message ?? null, messages, 600);
+    // Deduplicate: codex emits both event_msg (user_message/agent_message) AND
+    // response_item/message for the same turn, producing identical consecutive pairs.
+    // Remove a message if the next one has the same role and identical content text
+    // within a 50ms window — the event always precedes the response_item by ~1-5ms.
+    const deduped: typeof messages = [];
+    for (let i = 0; i < messages.length; i++) {
+      const cur = messages[i];
+      const nxt = messages[i + 1];
+      if (
+        nxt &&
+        cur.role === nxt.role &&
+        cur.contentText === nxt.contentText &&
+        cur.createdAt && nxt.createdAt &&
+        Math.abs(new Date(cur.createdAt).getTime() - new Date(nxt.createdAt).getTime()) <= 50
+      ) {
+        // Keep the next (response_item) version, skip this (event) version
+        continue;
+      }
+      deduped.push(cur);
+    }
+    // Re-assign ordinals after dedup so they are consecutive
+    deduped.forEach((m, idx) => { m.ordinal = idx; });
+
+    const summary = buildSummary(deduped, 600);
+    const promptFields = buildPromptFields(initialPrompt ?? metadata?.first_user_message ?? null, deduped, 600);
     const sourceArtifacts = [{ path: candidate.path, role: "primary" }];
 
     const bundle: NormalizedThreadBundle = {
@@ -234,7 +246,7 @@ export const codexAdapter: ProviderAdapter = {
       projectName: cwd ? cwd.split("/").filter(Boolean).at(-1) ?? null : null,
       repoPath: cwd ?? metadata?.cwd ?? null,
       cwd: cwd ?? metadata?.cwd ?? null,
-      createdAt: messages[0]?.createdAt ?? updatedAt,
+      createdAt: deduped[0]?.createdAt ?? updatedAt,
       updatedAt: updatedAt ?? metadata?.updatedAt ?? null,
       isArchived: Boolean(metadata?.archived),
       status: issues.length > 0 ? "partial" : "ok",
@@ -265,7 +277,7 @@ export const codexAdapter: ProviderAdapter = {
         depth: parsedSourceMetadata?.depth ?? null,
       },
       sourceArtifacts,
-      messages,
+      messages: deduped,
       issues,
     };
 

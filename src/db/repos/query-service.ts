@@ -27,6 +27,9 @@ export interface ThreadListItem {
   initialPromptPreview: string | null;
 }
 
+export type ThreadSortField = "updatedAt" | "messageCount" | "toolCallCount" | "title";
+export type SortDir = "asc" | "desc";
+
 export interface ThreadListQuery {
   provider?: string | null;
   project?: string | null;
@@ -34,6 +37,9 @@ export interface ThreadListQuery {
   q?: string | null;
   page: number;
   pageSize: number;
+  sort?: ThreadSortField | null;
+  dir?: SortDir | null;
+  hideSubagents?: boolean | null;
 }
 
 export interface ThreadListResult {
@@ -193,6 +199,26 @@ function buildThreadWhere(query: ThreadListQuery): { whereSql: string; params: s
     params.push(value, value, value, value, value);
   }
 
+  if (query.hideSubagents) {
+    // For claude-code and codex: hasSubagents:true means this thread IS a subagent (has a parent).
+    // For cursor: hasSubagents:true means the thread SPAWNED subagents (it's the parent) — keep those.
+    //   Cursor sub-agent threads are detected by checking if their provider_thread_id appears
+    //   in any other cursor thread's metadata_json subagentComposerIds array.
+    conditions.push(
+      `NOT (
+        (provider_id IN ('claude-code', 'codex') AND thread_flags_json LIKE '%"hasSubagents":true%')
+        OR
+        (provider_id = 'cursor' AND EXISTS (
+          SELECT 1 FROM threads _parent
+          WHERE _parent.provider_id = 'cursor'
+            AND _parent.metadata_json LIKE '%"subagentComposerIds"%'
+            AND _parent.metadata_json LIKE '%"' || threads.provider_thread_id || '"%'
+            AND _parent.id != threads.id
+        ))
+      )`,
+    );
+  }
+
   return {
     whereSql: conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "",
     params,
@@ -209,13 +235,22 @@ export function listThreads(db: Database, query: ThreadListQuery): ThreadListRes
   const total = Number(totalRow.count ?? 0);
   const offset = (normalizedPage - 1) * normalizedPageSize;
 
+  const sortColMap: Record<string, string> = {
+    updatedAt: "updated_at",
+    messageCount: "message_count",
+    toolCallCount: "tool_call_count",
+    title: "COALESCE(title, '')",
+  };
+  const sortCol = sortColMap[query.sort ?? ""] ?? "updated_at";
+  const sortDir = query.dir === "asc" ? "ASC" : "DESC";
+
   const items = db.query(
     `SELECT id, title, title_source AS titleSource, provider_id AS providerId, project_name AS projectName, repo_path AS repoPath, updated_at AS updatedAt,
             status, message_count AS messageCount, tool_call_count AS toolCallCount, summary,
             initial_prompt_preview AS initialPromptPreview
      FROM threads
      ${whereSql}
-     ORDER BY updated_at DESC
+     ORDER BY ${sortCol} ${sortDir}
      LIMIT ? OFFSET ?`,
   ).all(...params, normalizedPageSize, offset) as ThreadListItem[];
 
@@ -229,8 +264,13 @@ export function listThreads(db: Database, query: ThreadListQuery): ThreadListRes
 
 export function getThreadDetail(db: Database, threadId: string): ThreadDetail | null {
   const thread = db.query(
-    `SELECT id, provider_id, provider_thread_id, title, project_name, repo_path, cwd, created_at, updated_at,
-            message_count, user_message_count, assistant_message_count, tool_call_count, error_count, status, is_archived,
+    `SELECT id,
+            provider_id AS providerId, provider_thread_id AS providerThreadId,
+            title, project_name AS projectName, repo_path AS repoPath, cwd,
+            created_at AS createdAt, updated_at AS updatedAt,
+            message_count AS messageCount, user_message_count AS userMessageCount,
+            assistant_message_count AS assistantMessageCount, tool_call_count AS toolCallCount,
+            error_count AS errorCount, status, is_archived AS isArchived,
             summary, initial_prompt AS initialPrompt, initial_prompt_preview AS initialPromptPreview,
             title_source AS titleSource, initial_prompt_source AS initialPromptSource,
             first_user_snippet AS firstUserSnippet, last_assistant_snippet AS lastAssistantSnippet,

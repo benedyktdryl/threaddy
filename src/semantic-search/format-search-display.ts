@@ -1,5 +1,8 @@
+import { clampMultilineText } from "../core/utils/text";
+
 const HEADLINE_FALLBACK_MAX = 100;
-const BODY_PREVIEW_MAX = 320;
+const BODY_PREVIEW_MAX_CHARS = 320;
+const BODY_PREVIEW_MAX_LINES = 8;
 
 function pickPromptSource(initialPromptPreview: string | null, firstUserSnippet: string | null): string {
   const fromPreview = (initialPromptPreview ?? "").trim();
@@ -7,18 +10,19 @@ function pickPromptSource(initialPromptPreview: string | null, firstUserSnippet:
   return (firstUserSnippet ?? "").trim();
 }
 
-/** Primary line: real title, or a short start of the user/task prompt when untitled. */
+/** Primary line: real title (bounded), or a short multiline-safe excerpt when untitled. */
 export function searchResultHeadline(
   threadTitle: string | null,
   initialPromptPreview: string | null,
   firstUserSnippet: string | null,
 ): string {
   const title = threadTitle?.trim();
-  if (title) return title;
+  if (title) {
+    return clampMultilineText(title, 220, 5, "…");
+  }
   const prompt = pickPromptSource(initialPromptPreview, firstUserSnippet);
   if (!prompt) return "(untitled)";
-  if (prompt.length <= HEADLINE_FALLBACK_MAX) return prompt;
-  return `${prompt.slice(0, HEADLINE_FALLBACK_MAX)}…`;
+  return clampMultilineText(prompt, HEADLINE_FALLBACK_MAX, 4, "…");
 }
 
 /** Secondary snippet: task / user context only — not matched chunk text (avoids assistant dialogue in the list). */
@@ -28,6 +32,5 @@ export function searchResultBodyPreview(
 ): string {
   const text = pickPromptSource(initialPromptPreview, firstUserSnippet);
   if (!text) return "";
-  if (text.length <= BODY_PREVIEW_MAX) return text;
-  return `${text.slice(0, BODY_PREVIEW_MAX)}…`;
+  return clampMultilineText(text, BODY_PREVIEW_MAX_CHARS, BODY_PREVIEW_MAX_LINES, "…");
 }

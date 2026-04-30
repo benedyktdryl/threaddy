@@ -78,6 +78,7 @@ export function AppShell({
   children,
   toolbar,
   fullBleed,
+  backHref,
 }: PropsWithChildren<{
   title: string;
   currentPath: string;
@@ -88,6 +89,7 @@ export function AppShell({
   config: AppConfig;
   toolbar?: ReactNode;
   fullBleed?: boolean;
+  backHref?: string;
 }>) {
   const lastRunText = stats.lastRun?.completedAt ?? stats.lastRun?.startedAt ?? "Never";
 
@@ -98,6 +100,11 @@ export function AppShell({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>{`${title} · Threaddy`}</title>
         <link href="/assets/app.css" rel="stylesheet" />
+        <link
+          href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233b82f6'/%3E%3Cg stroke='white' stroke-linecap='round' stroke-width='2.2' fill='none'%3E%3Cline x1='8' y1='10' x2='24' y2='10'/%3E%3Cline x1='8' y1='16' x2='20' y2='16'/%3E%3Cpath d='M8 22 Q14 19 20 22 Q24 24 24 22' stroke-linejoin='round'/%3E%3C/g%3E%3C/svg%3E"
+          rel="icon"
+          type="image/svg+xml"
+        />
       </head>
       <body>
         <div className="flex h-screen flex-col">
@@ -235,7 +242,18 @@ export function AppShell({
             <div className="flex flex-1 flex-col overflow-hidden">
               {/* Top bar */}
               <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-5 py-2.5">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  {backHref && (
+                    <a
+                      className="flex items-center gap-1 rounded px-1.5 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                      data-back
+                      href={backHref}
+                    >
+                      <svg fill="none" height="12" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" width="12"><path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      Back
+                    </a>
+                  )}
+                  {backHref && <span className="text-[12px] text-border">/</span>}
                   <h1 className="text-[15px] font-semibold tracking-tight">{title}</h1>
                 </div>
                 <div className="flex items-center gap-2">
@@ -373,6 +391,16 @@ export function AppShell({
           dangerouslySetInnerHTML={{
             __html: `
               (() => {
+                // Back links — use history.back() when available so ?preview= state is preserved
+                for (const el of document.querySelectorAll("[data-back]")) {
+                  el.addEventListener("click", (e) => {
+                    if (history.length > 1) {
+                      e.preventDefault();
+                      history.back();
+                    }
+                  });
+                }
+
                 const forms = document.querySelectorAll("form[data-auto-submit]");
                 for (const form of forms) {
                   let timer = null;
@@ -480,6 +508,55 @@ export function AppShell({
                 });
 
                 backdrop.addEventListener("click", close);
+
+                // Message expand/collapse
+                document.addEventListener("click", function(e) {
+                  const btn = e.target.closest(".msg-expand-btn");
+                  if (!btn) return;
+                  const wrapper = btn.previousElementSibling;
+                  if (!wrapper || !wrapper.classList.contains("msg-collapsible")) return;
+                  const isCollapsed = wrapper.classList.contains("max-h-28") || wrapper.classList.contains("max-h-20");
+                  if (isCollapsed) {
+                    wrapper.classList.remove("max-h-28", "max-h-20", "overflow-hidden");
+                    const fade = wrapper.querySelector(".bg-gradient-to-t");
+                    if (fade) fade.style.display = "none";
+                    btn.textContent = "show less";
+                  } else {
+                    const cls = btn.dataset.collapseClass || "max-h-28";
+                    wrapper.classList.add(cls, "overflow-hidden");
+                    const fade = wrapper.querySelector(".bg-gradient-to-t");
+                    if (fade) fade.style.display = "";
+                    btn.textContent = "show more";
+                  }
+                });
+
+                // Message timeline filter
+                document.addEventListener("click", function(e) {
+                  const btn = e.target.closest(".msg-filter-btn");
+                  if (!btn) return;
+                  const bar = btn.closest("#msg-filter-bar");
+                  const list = document.getElementById("msg-list");
+                  if (!bar || !list) return;
+                  const filter = btn.dataset.filter;
+                  // Update button styles
+                  for (const b of bar.querySelectorAll(".msg-filter-btn")) {
+                    b.classList.toggle("bg-[hsl(var(--muted))]", b === btn);
+                    b.classList.toggle("font-medium", b === btn);
+                    b.classList.toggle("text-[hsl(var(--muted-foreground))]", b !== btn);
+                  }
+                  // Show/hide rows
+                  for (const row of list.children) {
+                    const kind = row.dataset.msgKind;
+                    const role = row.dataset.msgRole;
+                    if (filter === "all") {
+                      row.style.display = "";
+                    } else if (filter === "chat") {
+                      row.style.display = (role === "user" || role === "assistant") ? "" : "none";
+                    } else if (filter === "tools") {
+                      row.style.display = (kind === "tool_call" || kind === "tool_result") ? "" : "none";
+                    }
+                  }
+                });
               })();
             `,
           }}

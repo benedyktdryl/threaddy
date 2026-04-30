@@ -13,9 +13,17 @@ import type {
 } from "../core/types/domain";
 import { stableId } from "../core/utils/ids";
 import { listFilesRecursive, pathExists, safeStat } from "../core/utils/fs";
-import { cleanPromptText, deriveTitleFromPrompt, firstNonEmpty, toPreview } from "../core/utils/text";
+import {
+  clampMultilineText,
+  cleanPromptText,
+  deriveTitleFromPrompt,
+  firstNonEmpty,
+  THREAD_PROMPT_MAX_CHARS,
+  THREAD_PROMPT_MAX_LINES,
+  toPreview,
+} from "../core/utils/text";
 
-export const CURRENT_PARSER_VERSION = 3;
+export const CURRENT_PARSER_VERSION = 4;
 
 export function providerEnabled(providerEnabled: boolean, root: string, providerId: ProviderId): DiscoveredRoot {
   if (!providerEnabled) {
@@ -146,13 +154,23 @@ export function buildPromptFields(
   derivedTitle: string | null;
 } {
   const cleanedPrompt = cleanPromptText(initialPrompt);
-  const firstUser =
-    cleanedPrompt ?? messages.find((message) => message.role === "user" && message.contentPreview)?.contentPreview ?? null;
+  const firstUserMessage = messages.find(
+    (message) => message.role === "user" && (message.contentText?.trim() || message.contentPreview?.trim()),
+  );
+  const firstUserRaw =
+    cleanedPrompt ??
+    firstUserMessage?.contentText ??
+    firstUserMessage?.contentPreview ??
+    null;
+
+  const initialPromptStored = cleanedPrompt
+    ? clampMultilineText(cleanedPrompt, THREAD_PROMPT_MAX_CHARS, THREAD_PROMPT_MAX_LINES)
+    : null;
 
   return {
-    initialPrompt: cleanedPrompt,
-    initialPromptPreview: toPreview(cleanedPrompt, maxPreviewLength),
-    firstUserSnippet: toPreview(firstUser, maxPreviewLength),
+    initialPrompt: initialPromptStored,
+    initialPromptPreview: cleanedPrompt ? toPreview(cleanedPrompt, maxPreviewLength) : null,
+    firstUserSnippet: toPreview(firstUserRaw, maxPreviewLength),
     derivedTitle: deriveTitleFromPrompt(cleanedPrompt),
   };
 }
