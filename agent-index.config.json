@@ -24,7 +24,7 @@
     "maxPreviewLength": 600
   },
   "watch": {
-    "enabled": false,
+    "enabled": true,
     "debounceMs": 1000
   },
   "excludes": [

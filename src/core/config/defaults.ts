@@ -17,7 +17,7 @@ export const DEFAULT_CONFIG: AppConfig = {
     maxPreviewLength: 600,
   },
   watch: {
-    enabled: false,
+    enabled: true,
     debounceMs: 1000,
   },
   excludes: ["**/node_modules/**", "**/.git/**"],

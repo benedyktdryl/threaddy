@@ -2,12 +2,12 @@
 // storage and mirrors it into the thread_pins table. Run on every index pass.
 //
 // Join key per provider is (provider_id, provider_thread_id):
-//   - codex:       ~/.codex/.codex-global-state.json → "pinned-thread-ids" (thread UUIDs)
-//   - cursor:      <Cursor>/User/workspaceStorage/**/state.vscdb → ItemTable
+//   - codex:       ~/.codex/.codex-global-state.json -> "pinned-thread-ids" (thread UUIDs)
+//   - cursor:      <Cursor>/User/workspaceStorage/**/state.vscdb -> ItemTable
 //                  "cursor/pinnedComposers" (composerIds)
 //   - claude-code: Claude desktop app, 2-hop:
-//                  IndexedDB leveldb → {"state":{"starredIds":["local_<uuid>",…]},…,"updatedAt"}
-//                  then claude-code-sessions/**/local_<uuid>.json → "cliSessionId"
+//                  IndexedDB leveldb -> {"state":{"starredIds":["local_<uuid>",...]},...,"updatedAt"}
+//                  then claude-code-sessions/**/local_<uuid>.json -> "cliSessionId"
 //
 // Every reader is best-effort: missing files / uninstalled apps yield [] rather
 // than throwing, so indexing never fails because a provider app isn't present.
@@ -24,6 +24,22 @@ import { logger } from "../../core/logging/logger";
 export interface ProviderPin {
   providerId: ProviderId;
   providerThreadId: string;
+}
+
+/**
+ * Filesystem locations that hold provider pin state, for a lightweight watcher.
+ * A change here should trigger syncPins() only (not a full reindex). `recursive`
+ * is false for the Codex dir so we don't double-watch ~/.codex/sessions.
+ */
+export function pinWatchPaths(): Array<{ path: string; recursive: boolean }> {
+  return [
+    { path: join(homedir(), ".codex"), recursive: false },
+    { path: join(homedir(), "Library", "Application Support", "Cursor", "User", "workspaceStorage"), recursive: true },
+    {
+      path: join(homedir(), "Library", "Application Support", "Claude", "IndexedDB", "https_claude.ai_0.indexeddb.leveldb"),
+      recursive: true,
+    },
+  ].filter((t) => existsSync(t.path));
 }
 
 function readCodexPins(): ProviderPin[] {
@@ -110,7 +126,7 @@ function readClaudeCodePins(): ProviderPin[] {
 
   if (latestStarred.length === 0) return [];
 
-  // 2) Resolve each local_<uuid> → its cliSessionId (== ~/.claude/projects jsonl
+  // 2) Resolve each local_<uuid> -> its cliSessionId (== ~/.claude/projects jsonl
   //    filename == claude-code provider_thread_id).
   const sessionsDir = join(claudeDir, "claude-code-sessions");
   const pins: ProviderPin[] = [];
@@ -146,30 +162,45 @@ const PROVIDER_PIN_READERS: Record<string, () => ProviderPin[]> = {
   "claude-code": readClaudeCodePins,
 };
 
+// Signature of the last imported pin set. The pin-watch directories (Cursor
+// workspaceStorage, Claude IndexedDB) churn on any app activity, so syncPins is
+// called very frequently; when the actual pins haven't changed we skip the DB
+// write and the log line entirely.
+let lastSignature: string | null = null;
+
 /**
  * Refresh provider-sourced pins in the thread_pins table. For each provider we
  * delete its existing rows and re-insert the current set, so unpinning in the
  * source app is reflected. Manual (source='manual') pins are never touched.
+ * No-op (besides cheap file reads) when the pin set is unchanged.
  */
-export function syncPins(db: Database): { imported: number } {
-  const now = new Date().toISOString();
-  let imported = 0;
+export function syncPins(db: Database): { imported: number; changed: boolean } {
+  const collected = Object.entries(PROVIDER_PIN_READERS).map(([source, read]) => ({ source, pins: read() }));
 
+  const signature = collected
+    .flatMap(({ source, pins }) => pins.map((p) => `${source} ${p.providerId} ${p.providerThreadId}`))
+    .sort()
+    .join("\n");
+  const imported = collected.reduce((n, c) => n + c.pins.length, 0);
+
+  if (signature === lastSignature) {
+    return { imported, changed: false };
+  }
+
+  const now = new Date().toISOString();
   const tx = db.transaction(() => {
     const del = db.query("DELETE FROM thread_pins WHERE source = ?");
     const ins = db.query(
       "INSERT OR IGNORE INTO thread_pins (provider_id, provider_thread_id, source, pinned_at) VALUES (?, ?, ?, ?)",
     );
-    for (const [source, read] of Object.entries(PROVIDER_PIN_READERS)) {
+    for (const { source, pins } of collected) {
       del.run(source);
-      for (const pin of read()) {
-        ins.run(pin.providerId, pin.providerThreadId, source, now);
-        imported += 1;
-      }
+      for (const pin of pins) ins.run(pin.providerId, pin.providerThreadId, source, now);
     }
   });
   tx();
 
+  lastSignature = signature;
   logger.info("pins_synced", { imported });
-  return { imported };
+  return { imported, changed: true };
 }
