@@ -6,7 +6,7 @@ import appCssPath from "../assets/app.css" with { type: "file" };
 
 import type { AppConfig } from "../../core/types/domain";
 import type { SyncManager } from "../../indexer/watcher";
-import { getUserConfigPath } from "../../core/config/load-config";
+import { getDevConfigPath } from "../../core/config/load-config";
 import { configSchema, flattenZodErrors } from "../../core/config/config-schema";
 import {
   getDashboardStats,
@@ -138,7 +138,7 @@ async function renderThreadsPage(config: AppConfig, db: Database, url: URL): Pro
 }
 
 
-export function createRouter(db: Database, config: AppConfig, syncManager?: SyncManager): (request: Request) => Promise<Response> {
+export function createRouter(db: Database, config: AppConfig, cwd: string = process.cwd(), syncManager?: SyncManager): (request: Request) => Promise<Response> {
   return async (request) => {
     const url = new URL(request.url);
 
@@ -233,7 +233,7 @@ export function createRouter(db: Database, config: AppConfig, syncManager?: Sync
             <SettingsPage {...shellProps} jsonError="JSON is valid but config has errors — see fields below" rawJsonValue={raw} validationErrors={errors} />,
           ));
         }
-        const configPath = getUserConfigPath();
+        const configPath = getDevConfigPath(cwd);
         await mkdir(dirname(configPath), { recursive: true });
         await writeFile(configPath, `${JSON.stringify(result.data, null, 2)}\n`, "utf8");
         return Response.redirect(`${url.origin}/settings?notice=${encodeURIComponent("Configuration saved — restart to apply changes")}`, 303);
@@ -279,7 +279,7 @@ export function createRouter(db: Database, config: AppConfig, syncManager?: Sync
         ));
       }
 
-      const configPath = getUserConfigPath();
+      const configPath = getDevConfigPath(cwd);
       await mkdir(dirname(configPath), { recursive: true });
       await writeFile(configPath, `${JSON.stringify(result.data, null, 2)}\n`, "utf8");
       return Response.redirect(`${url.origin}/settings?notice=${encodeURIComponent("Configuration saved — restart to apply changes")}`, 303);

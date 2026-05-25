@@ -7,6 +7,7 @@ import { openDatabase } from "../db/client";
 import { getDashboardStats } from "../db/repos/query-service";
 import { runIndex, runSemanticOnly, scanProviders } from "../indexer/pipeline/indexer";
 import { SyncManager } from "../indexer/watcher";
+import { warmupEmbedder } from "../semantic-search/embeddings/embedder";
 import { hybridSearch } from "../semantic-search/retrieval/hybrid-search";
 import type { SearchMode } from "../semantic-search/types/index";
 import { createRouter } from "../app/server/router";
@@ -145,12 +146,16 @@ async function commandServe(cwd: string): Promise<void> {
   const config = await loadConfig(cwd);
   const db = await openDatabase(config.dbPath);
   const syncManager = new SyncManager(db, config);
-  const router = createRouter(db, config, syncManager);
+  const router = createRouter(db, config, cwd, syncManager);
 
   const server = Bun.serve({
     hostname: config.server.host,
     port: config.server.port,
     fetch: router,
+    // Default 10 s is not enough when the embedding model hasn't been
+    // downloaded/cached yet (first run can take 30 s+). 120 s covers even
+    // slow connections while still catching genuinely stuck requests.
+    idleTimeout: 120,
   });
 
   logger.info("server_started", { url: server.url.toString() });
@@ -158,6 +163,12 @@ async function commandServe(cwd: string): Promise<void> {
 
   // Run reindex in background so the server is immediately available
   syncManager.runSync().catch(() => {});
+
+  // Pre-warm the embedding model in the background so the first search request
+  // doesn't pay the cold-load penalty (download + ONNX init).
+  if (config.semanticSearch.enabled) {
+    warmupEmbedder(config.semanticSearch.model);
+  }
 
   if (config.watch.enabled) {
     await syncManager.startWatcher();
