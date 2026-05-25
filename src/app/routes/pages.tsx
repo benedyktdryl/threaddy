@@ -28,6 +28,20 @@ import { AppShell } from "../layout/app-shell";
 // Character count past which a message body is collapsed by default
 const MSG_COLLAPSE_THRESHOLD = 500;
 
+// Render an ISO timestamp as a readable local date/time, e.g. "May 25, 2026, 7:40 AM"
+function formatTimestamp(iso?: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 // Markdown body — renders with collapsible support
 function MarkdownBody({ text, collapsible = true }: { text: string; collapsible?: boolean }) {
   const html = marked.parse(text ?? "") as string;
@@ -749,7 +763,7 @@ function ThreadSplitLayout({
 
         {/* Pagination */}
         <div
-          className="flex shrink-0 flex-col gap-0.5 px-3 py-2 text-[11px] text-[hsl(var(--sidebar-muted))]"
+          className="flex h-[52px] shrink-0 flex-col justify-center gap-0.5 px-3 text-[11px] text-[hsl(var(--sidebar-muted))]"
           style={{ borderTop: "1px solid hsl(var(--sidebar-border))" }}
         >
           <div className="flex items-center justify-between">
@@ -1332,8 +1346,8 @@ export function RunsPage(props: ShellProps & { rows: IndexRunRow[] }) {
             {props.rows.length > 0 ? (
               props.rows.map((row, index) => (
                 <Tr key={`${row.startedAt}-${index}`}>
-                  <Td>{row.startedAt}</Td>
-                  <Td>{row.completedAt ?? ""}</Td>
+                  <Td className="whitespace-nowrap">{formatTimestamp(row.startedAt)}</Td>
+                  <Td className="whitespace-nowrap">{formatTimestamp(row.completedAt)}</Td>
                   <Td>
                     <StatusBadge status={row.status} />
                   </Td>

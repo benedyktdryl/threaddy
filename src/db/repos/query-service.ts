@@ -305,15 +305,14 @@ export function getThreadDetail(db: Database, threadId: string): ThreadDetail | 
   return { thread, sources, messages, issues };
 }
 
-export function listProjects(db: Database, limit = 20): Array<{ projectName: string; count: number }> {
+export function listProjects(db: Database): Array<{ projectName: string; count: number }> {
   return db.query(
     `SELECT project_name AS projectName, COUNT(*) AS count
      FROM threads
      WHERE project_name IS NOT NULL AND project_name != ''
      GROUP BY project_name
-     ORDER BY count DESC, project_name ASC
-     LIMIT ?`,
-  ).all(limit) as Array<{ projectName: string; count: number }>;
+     ORDER BY count DESC, project_name ASC`,
+  ).all() as Array<{ projectName: string; count: number }>;
 }
 
 export function listProviders(db: Database): Array<{ providerId: string; count: number }> {

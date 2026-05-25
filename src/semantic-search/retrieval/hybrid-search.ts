@@ -6,6 +6,25 @@ import { keywordSearch } from "./keyword-search";
 const SEMANTIC_WEIGHT = 0.7;
 const KEYWORD_WEIGHT = 0.3;
 
+// The embedding model is loaded from disk/network on first use and can fail
+// (missing/invalid model, offline, HF unreachable). Never let that crash a
+// search — degrade to keyword results instead.
+async function safeSemanticSearch(
+  db: Database,
+  query: string,
+  model: string,
+  limit: number,
+  provider?: string | null,
+  project?: string | null,
+): Promise<SearchResult[]> {
+  try {
+    return await semanticSearch(db, query, model, limit, provider, project);
+  } catch (error) {
+    console.error("Semantic search failed, falling back to keyword:", error);
+    return [];
+  }
+}
+
 export async function hybridSearch(
   db: Database,
   query: string,
@@ -15,17 +34,20 @@ export async function hybridSearch(
   provider?: string | null,
   project?: string | null,
 ): Promise<SearchResult[]> {
-  if (mode === "semantic") {
-    return semanticSearch(db, query, model, limit, provider, project);
-  }
-
   if (mode === "keyword") {
     return keywordSearch(db, query, limit, provider, project);
   }
 
+  if (mode === "semantic") {
+    const results = await safeSemanticSearch(db, query, model, limit, provider, project);
+    // If the embedding model is unavailable, fall back to keyword so the user
+    // still gets results rather than an empty page.
+    return results.length > 0 ? results : keywordSearch(db, query, limit, provider, project);
+  }
+
   // Hybrid: run both and merge
   const [semanticResults, keywordResults] = await Promise.all([
-    semanticSearch(db, query, model, limit, provider, project),
+    safeSemanticSearch(db, query, model, limit, provider, project),
     Promise.resolve(keywordSearch(db, query, limit, provider, project)),
   ]);
 

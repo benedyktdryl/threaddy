@@ -318,7 +318,8 @@ export function createRouter(db: Database, config: AppConfig, syncManager?: Sync
 
     if (url.pathname === "/api/search") {
       const q = url.searchParams.get("q") ?? "";
-      const mode = (url.searchParams.get("mode") ?? config.semanticSearch.mode) as SearchMode;
+      const requestedMode = (url.searchParams.get("mode") ?? config.semanticSearch.mode) as SearchMode;
+      const mode = config.semanticSearch.enabled ? requestedMode : "keyword";
       const provider = url.searchParams.get("provider");
       const project = url.searchParams.get("project");
       const limit = Math.min(50, Math.max(5, Number.parseInt(url.searchParams.get("limit") ?? "20", 10)));
@@ -421,7 +422,8 @@ export function createRouter(db: Database, config: AppConfig, syncManager?: Sync
 
     if (url.pathname === "/search") {
       const q = url.searchParams.get("q") ?? "";
-      const mode = (url.searchParams.get("mode") ?? config.semanticSearch.mode) as SearchMode;
+      const requestedMode = (url.searchParams.get("mode") ?? config.semanticSearch.mode) as SearchMode;
+      const mode = config.semanticSearch.enabled ? requestedMode : "keyword";
       const provider = url.searchParams.get("provider");
       const project = url.searchParams.get("project");
       const limit = 20;

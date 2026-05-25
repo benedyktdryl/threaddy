@@ -49,7 +49,7 @@ function NavSection({
   defaultOpen = true,
 }: PropsWithChildren<{ label: string; defaultOpen?: boolean }>) {
   return (
-    <details className="group mt-3" open={defaultOpen}>
+    <details className="group mt-3" data-nav-section={label} open={defaultOpen}>
       <summary className="mb-0.5 flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--sidebar-muted))] hover:text-[hsl(var(--sidebar-fg))] [&::-webkit-details-marker]:hidden">
         <ChevronRight className="shrink-0 transition-transform duration-150 group-open:rotate-90" size={10} />
         {label}
@@ -117,7 +117,7 @@ export function AppShell({
             >
               {/* Logo */}
               <div
-                className="flex shrink-0 items-center gap-2 px-3 py-3"
+                className="flex h-12 shrink-0 items-center gap-2 px-3"
                 style={{ borderBottom: "1px solid hsl(var(--sidebar-border))" }}
               >
                 <div className="flex h-[22px] w-[22px] items-center justify-center rounded bg-blue-500">
@@ -225,7 +225,7 @@ export function AppShell({
 
               {/* Settings pinned at bottom */}
               <div
-                className="shrink-0 px-2 pb-2 pt-1"
+                className="flex h-[52px] shrink-0 flex-col justify-center px-2"
                 style={{ borderTop: "1px solid hsl(var(--sidebar-border))" }}
               >
                 <NavItem
@@ -241,7 +241,7 @@ export function AppShell({
             {/* Main */}
             <div className="flex flex-1 flex-col overflow-hidden">
               {/* Top bar */}
-              <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-5 py-2.5">
+              <div className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-card px-5">
                 <div className="flex items-center gap-2">
                   {backHref && (
                     <a
@@ -261,12 +261,16 @@ export function AppShell({
                     <span className="inline-block h-2 w-2 rounded-full" id="sync-dot" />
                     <span id="sync-text">Syncing…</span>
                   </span>
-                  <form action="/actions/reindex" method="post">
+                  <form action="/actions/reindex" data-reindex-form method="post">
                     <button
-                      className="rounded-md border border-border bg-card px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-accent"
+                      className="flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-[12px] font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-70"
                       type="submit"
                     >
-                      Refresh Index
+                      <svg className="hidden h-3 w-3 animate-spin" data-reindex-spinner fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" d="M4 12a8 8 0 018-8" fill="currentColor" />
+                      </svg>
+                      <span data-reindex-label>Refresh Index</span>
                     </button>
                   </form>
                   {toolbar}
@@ -391,6 +395,30 @@ export function AppShell({
           dangerouslySetInnerHTML={{
             __html: `
               (() => {
+                // Persist sidebar section open/closed state across navigations
+                for (const details of document.querySelectorAll("[data-nav-section]")) {
+                  const key = "nav-section:" + details.getAttribute("data-nav-section");
+                  const saved = localStorage.getItem(key);
+                  if (saved === "open") details.open = true;
+                  else if (saved === "closed") details.open = false;
+                  details.addEventListener("toggle", () => {
+                    localStorage.setItem(key, details.open ? "open" : "closed");
+                  });
+                }
+
+                // Refresh Index button — show a spinner while the (blocking) reindex runs
+                const reindexForm = document.querySelector("[data-reindex-form]");
+                if (reindexForm) {
+                  reindexForm.addEventListener("submit", () => {
+                    const btn = reindexForm.querySelector("button");
+                    const spinner = reindexForm.querySelector("[data-reindex-spinner]");
+                    const label = reindexForm.querySelector("[data-reindex-label]");
+                    if (btn) btn.disabled = true;
+                    if (spinner) spinner.classList.remove("hidden");
+                    if (label) label.textContent = "Refreshing…";
+                  });
+                }
+
                 // Back links — use history.back() when available so ?preview= state is preserved
                 for (const el of document.querySelectorAll("[data-back]")) {
                   el.addEventListener("click", (e) => {
