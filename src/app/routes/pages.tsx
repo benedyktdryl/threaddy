@@ -498,6 +498,7 @@ type ShellProps = {
   projects: Array<{ projectName: string; count: number }>;
   providers: Array<{ providerId: string; count: number }>;
   savedFilters: Array<{ id: string; name: string; href: string }>;
+  pinned?: Array<{ threadId: string; title: string | null; providerId: string; projectName: string | null }>;
 };
 
 function ThreadPreviewContent({ detail, relatedThreads }: { detail: ThreadDetail; relatedThreads?: SearchResult[] }) {

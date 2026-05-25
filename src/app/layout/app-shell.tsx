@@ -6,6 +6,7 @@ import {
   Database,
   FolderOpen,
   FolderTree,
+  Pin,
   Search,
   Settings2,
   Zap,
@@ -74,6 +75,7 @@ export function AppShell({
   projects,
   providers,
   savedFilters,
+  pinned,
   config,
   children,
   toolbar,
@@ -86,6 +88,7 @@ export function AppShell({
   projects: Array<{ projectName: string; count: number }>;
   providers: Array<{ providerId: string; count: number }>;
   savedFilters: Array<{ id: string; name: string; href: string }>;
+  pinned?: Array<{ threadId: string; title: string | null; providerId: string; projectName: string | null }>;
   config: AppConfig;
   toolbar?: ReactNode;
   fullBleed?: boolean;
@@ -146,6 +149,20 @@ export function AppShell({
                     Semantic Search
                   </NavItem>
                 </div>
+
+                {pinned && pinned.length > 0 && (
+                  <NavSection label="Pinned">
+                    {pinned.map((p) => (
+                      <NavItem
+                        href={`/threads/${p.threadId}`}
+                        icon={<Pin className="fill-amber-400 text-amber-500" size={12} />}
+                        key={p.threadId}
+                      >
+                        {p.title ?? "(untitled)"}
+                      </NavItem>
+                    ))}
+                  </NavSection>
+                )}
 
                 {providers.length > 0 && (
                   <NavSection label="Providers">

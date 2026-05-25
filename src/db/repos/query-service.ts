@@ -40,6 +40,7 @@ export interface ThreadListQuery {
   sort?: ThreadSortField | null;
   dir?: SortDir | null;
   hideSubagents?: boolean | null;
+  pinned?: boolean | null;
 }
 
 export interface ThreadListResult {
@@ -184,6 +185,14 @@ function buildThreadWhere(query: ThreadListQuery): { whereSql: string; params: s
     params.push(query.project);
   }
 
+  if (query.pinned) {
+    conditions.push(
+      `EXISTS (SELECT 1 FROM thread_pins p
+               WHERE p.provider_id = threads.provider_id
+                 AND p.provider_thread_id = threads.provider_thread_id)`,
+    );
+  }
+
   if (query.status) {
     conditions.push("status = ?");
     params.push(query.status);
@@ -322,6 +331,28 @@ export function listProviders(db: Database): Array<{ providerId: string; count: 
      GROUP BY provider_id
      ORDER BY count DESC, provider_id ASC`,
   ).all() as Array<{ providerId: string; count: number }>;
+}
+
+export interface PinnedThreadRow {
+  threadId: string;
+  title: string | null;
+  providerId: string;
+  projectName: string | null;
+}
+
+/** Threads pinned in any provider (or manually). Spans all providers. */
+export function listPinnedThreads(db: Database, limit = 50): PinnedThreadRow[] {
+  return db.query(
+    `SELECT t.id AS threadId, t.title, t.provider_id AS providerId, t.project_name AS projectName
+     FROM thread_pins p
+     JOIN threads t
+       ON t.provider_id = p.provider_id
+      AND t.provider_thread_id = p.provider_thread_id
+     WHERE t.status != 'orphaned'
+     GROUP BY t.id
+     ORDER BY MAX(p.pinned_at) DESC, t.updated_at DESC
+     LIMIT ?`,
+  ).all(limit) as PinnedThreadRow[];
 }
 
 export function listSavedFilters(db: Database, limit = 10): SavedFilterRow[] {

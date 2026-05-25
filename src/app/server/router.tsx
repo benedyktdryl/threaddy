@@ -15,6 +15,7 @@ import {
   getThreadDetail,
   listIndexRuns,
   listParseIssues,
+  listPinnedThreads,
   listProjects,
   listProviders,
   listSavedFilters,
@@ -59,7 +60,7 @@ function notFoundPage(config: AppConfig, db: Database, currentPath: string): Res
       config={config}
       currentPath={currentPath}
       projects={listProjects(db)}
-      providers={listProviders(db)}
+      providers={listProviders(db)} pinned={listPinnedThreads(db)}
       savedFilters={listSavedFilters(db)}
       stats={getDashboardStats(db)}
     />,
@@ -84,6 +85,8 @@ function buildThreadQuery(url: URL, overrides?: { provider?: string; project?: s
   // Default hideSubagents to true unless explicitly set to "0" or "false"
   const rawHide = url.searchParams.get("hideSubagents");
   const hideSubagents = rawHide === "0" || rawHide === "false" ? false : true;
+  const rawPinned = url.searchParams.get("pinned");
+  const pinned = rawPinned === "1" || rawPinned === "true";
 
   return {
     provider: overrides?.provider ?? url.searchParams.get("provider"),
@@ -95,6 +98,7 @@ function buildThreadQuery(url: URL, overrides?: { provider?: string; project?: s
     sort,
     dir,
     hideSubagents,
+    pinned,
   };
 }
 
@@ -120,7 +124,7 @@ async function renderThreadsPage(config: AppConfig, db: Database, url: URL): Pro
     config,
     currentPath: "/threads",
     projects: listProjects(db),
-    providers: listProviders(db),
+    providers: listProviders(db), pinned: listPinnedThreads(db),
     savedFilters: listSavedFilters(db),
     stats: getDashboardStats(db),
   };
@@ -206,7 +210,7 @@ export function createRouter(db: Database, config: AppConfig, cwd: string = proc
         config,
         currentPath: "/settings",
         projects: listProjects(db),
-        providers: listProviders(db),
+        providers: listProviders(db), pinned: listPinnedThreads(db),
         savedFilters: listSavedFilters(db),
         stats: getDashboardStats(db),
       };
@@ -338,7 +342,7 @@ export function createRouter(db: Database, config: AppConfig, cwd: string = proc
       if (!summary) return notFoundPage(config, db, url.pathname);
       const query = buildThreadQuery(url, { provider: providerId });
       const { previewId, previewDetail, relatedThreads } = await resolvePreview(db, config, url);
-      const shellProps = { config, currentPath: url.pathname, projects: listProjects(db), providers: listProviders(db), savedFilters: listSavedFilters(db), stats: getDashboardStats(db) };
+      const shellProps = { config, currentPath: url.pathname, projects: listProjects(db), providers: listProviders(db), pinned: listPinnedThreads(db), savedFilters: listSavedFilters(db), stats: getDashboardStats(db) };
       return htmlResponse(renderDocument(
         <ProviderPage {...shellProps} summary={summary} threads={listThreads(db, query)} query={query} previewId={previewId} previewDetail={previewDetail} relatedThreads={relatedThreads} />,
       ));
@@ -350,7 +354,7 @@ export function createRouter(db: Database, config: AppConfig, cwd: string = proc
       if (!summary) return notFoundPage(config, db, url.pathname);
       const query = buildThreadQuery(url, { project: projectName });
       const { previewId, previewDetail, relatedThreads } = await resolvePreview(db, config, url);
-      const shellProps = { config, currentPath: url.pathname, projects: listProjects(db), providers: listProviders(db), savedFilters: listSavedFilters(db), stats: getDashboardStats(db) };
+      const shellProps = { config, currentPath: url.pathname, projects: listProjects(db), providers: listProviders(db), pinned: listPinnedThreads(db), savedFilters: listSavedFilters(db), stats: getDashboardStats(db) };
       return htmlResponse(renderDocument(
         <ProjectPage {...shellProps} summary={summary} threads={listThreads(db, query)} query={query} previewId={previewId} previewDetail={previewDetail} relatedThreads={relatedThreads} />,
       ));
@@ -363,7 +367,7 @@ export function createRouter(db: Database, config: AppConfig, cwd: string = proc
             config={config}
             currentPath={url.pathname}
             projects={listProjects(db)}
-            providers={listProviders(db)}
+            providers={listProviders(db)} pinned={listPinnedThreads(db)}
             savedFilters={listSavedFilters(db)}
             rows={listParseIssues(db)}
             stats={getDashboardStats(db)}
@@ -379,7 +383,7 @@ export function createRouter(db: Database, config: AppConfig, cwd: string = proc
             config={config}
             currentPath={url.pathname}
             projects={listProjects(db)}
-            providers={listProviders(db)}
+            providers={listProviders(db)} pinned={listPinnedThreads(db)}
             savedFilters={listSavedFilters(db)}
             rows={listSourceRoots(db)}
             stats={getDashboardStats(db)}
@@ -395,7 +399,7 @@ export function createRouter(db: Database, config: AppConfig, cwd: string = proc
             config={config}
             currentPath={url.pathname}
             projects={listProjects(db)}
-            providers={listProviders(db)}
+            providers={listProviders(db)} pinned={listPinnedThreads(db)}
             savedFilters={listSavedFilters(db)}
             rows={listIndexRuns(db)}
             stats={getDashboardStats(db)}
@@ -412,7 +416,7 @@ export function createRouter(db: Database, config: AppConfig, cwd: string = proc
             currentPath="/settings"
             notice={url.searchParams.get("notice")}
             projects={listProjects(db)}
-            providers={listProviders(db)}
+            providers={listProviders(db)} pinned={listPinnedThreads(db)}
             savedFilters={listSavedFilters(db)}
             stats={getDashboardStats(db)}
           />,
@@ -436,7 +440,7 @@ export function createRouter(db: Database, config: AppConfig, cwd: string = proc
             config={config}
             currentPath="/search"
             projects={listProjects(db)}
-            providers={listProviders(db)}
+            providers={listProviders(db)} pinned={listPinnedThreads(db)}
             savedFilters={listSavedFilters(db)}
             stats={getDashboardStats(db)}
             q={q}
@@ -458,7 +462,7 @@ export function createRouter(db: Database, config: AppConfig, cwd: string = proc
             config={config}
             currentPath="/diagnostics/semantic"
             projects={listProjects(db)}
-            providers={listProviders(db)}
+            providers={listProviders(db)} pinned={listPinnedThreads(db)}
             savedFilters={listSavedFilters(db)}
             stats={getDashboardStats(db)}
             notice={url.searchParams.get("notice")}
@@ -484,7 +488,7 @@ export function createRouter(db: Database, config: AppConfig, cwd: string = proc
             currentPath="/threads"
             detail={detail}
             projects={listProjects(db)}
-            providers={listProviders(db)}
+            providers={listProviders(db)} pinned={listPinnedThreads(db)}
             savedFilters={listSavedFilters(db)}
             stats={getDashboardStats(db)}
             relatedThreads={related}

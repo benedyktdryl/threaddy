@@ -16,6 +16,7 @@ import { messageId } from "../../providers/shared";
 import { CURRENT_PARSER_VERSION } from "../../providers/shared";
 import { providerRegistry } from "../../providers/registry";
 import { runSemanticIndex } from "../../semantic-search/indexing/semantic-indexer";
+import { syncPins } from "../pins/sync-pins";
 
 function getExistingSource(db: Database, sourcePath: string): ExistingSourceRecord | null {
   const row = db
@@ -333,6 +334,14 @@ export async function runIndex(db: Database, config: AppConfig, onlyProviderId?:
           }
         }
       }
+    }
+
+    // Import pinned/starred state from each provider's own storage. Best-effort:
+    // a failure here must not fail the index run.
+    try {
+      syncPins(db);
+    } catch (error) {
+      summary.notes = `pin sync failed: ${error instanceof Error ? error.message : String(error)}`;
     }
 
     // Run semantic indexing after regular indexing if enabled
