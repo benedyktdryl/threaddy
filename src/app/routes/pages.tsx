@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { marked } from "marked";
-import { Bot, FileText, Filter, User, Wrench, CornerDownRight } from "lucide-react";
+import { Bot, FileText, Filter, User, Wrench, CornerDownRight, ExternalLink } from "lucide-react";
 
 import type { AppConfig } from "../../core/types/domain";
 import type {
@@ -27,6 +27,34 @@ import { AppShell } from "../layout/app-shell";
 
 // Character count past which a message body is collapsed by default
 const MSG_COLLAPSE_THRESHOLD = 500;
+
+// Deep link that opens a thread in its source provider's desktop app.
+// Returns null when the provider has no usable per-conversation deep link.
+//   - Codex: `codex://threads/<threadId>` (threadId == provider_thread_id). Verified
+//     from Codex.app — it builds exactly `codex://threads/${id}` to open a thread.
+// Cursor and Claude Code currently have no reliable external per-conversation link.
+function providerDeepLink(providerId: string, providerThreadId: string): { href: string; label: string } | null {
+  switch (providerId) {
+    case "codex":
+      return { href: `codex://threads/${providerThreadId}`, label: "Open in Codex" };
+    default:
+      return null;
+  }
+}
+
+function OpenInProviderButton({ providerId, providerThreadId }: { providerId: string; providerThreadId: string }) {
+  const link = providerDeepLink(providerId, providerThreadId);
+  if (!link) return null;
+  return (
+    <a
+      className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1 text-[12px] font-medium text-foreground transition-colors hover:bg-accent"
+      href={link.href}
+    >
+      <ExternalLink size={12} />
+      {link.label}
+    </a>
+  );
+}
 
 // Render an ISO timestamp as a readable local date/time, e.g. "May 25, 2026, 7:40 AM"
 function formatTimestamp(iso?: string | null): string {
@@ -517,9 +545,12 @@ function ThreadPreviewContent({ detail, relatedThreads }: { detail: ThreadDetail
           <StatusBadge status={thread.status} />
           <Badge>{thread.providerId}</Badge>
           {thread.isArchived ? <Badge>archived</Badge> : null}
-          <a className="ml-auto text-[12px] text-muted-foreground hover:text-foreground hover:underline" href={`/threads/${thread.id}`}>
-            Open full view →
-          </a>
+          <div className="ml-auto flex items-center gap-2">
+            <OpenInProviderButton providerId={thread.providerId} providerThreadId={thread.providerThreadId} />
+            <a className="text-[12px] text-muted-foreground hover:text-foreground hover:underline" href={`/threads/${thread.id}`}>
+              Open full view →
+            </a>
+          </div>
         </div>
         <h2 className="mb-3 text-xl font-semibold tracking-tight">{thread.title ?? "(untitled)"}</h2>
 
@@ -1007,6 +1038,9 @@ export function ThreadDetailPage(props: ShellProps & { detail: ThreadDetail; rel
               <StatusBadge status={thread.status} />
               <Badge>{thread.providerId}</Badge>
               {thread.isArchived ? <Badge>archived</Badge> : null}
+              <div className="ml-auto">
+                <OpenInProviderButton providerId={thread.providerId} providerThreadId={thread.providerThreadId} />
+              </div>
             </div>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight">{thread.title ?? "(untitled)"}</h2>
             {(thread.initialPromptPreview ?? thread.summary) && (
