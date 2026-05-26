@@ -30,13 +30,20 @@ const MSG_COLLAPSE_THRESHOLD = 500;
 
 // Deep link that opens a thread in its source provider's desktop app.
 // Returns null when the provider has no usable per-conversation deep link.
-//   - Codex: `codex://threads/<threadId>` (threadId == provider_thread_id). Verified
-//     from Codex.app — it builds exactly `codex://threads/${id}` to open a thread.
-// Cursor and Claude Code currently have no reliable external per-conversation link.
+// (Both formats verified by reverse-engineering the apps' bundles.)
+//   - Codex:       `codex://threads/<threadId>` — Codex builds exactly this to open a thread.
+//   - Claude Code: `claude://resume?session=<cliSessionId>` — the Claude desktop app's
+//                  resume handler runs importCliSession(<uuid>), which reads
+//                  ~/.claude/projects/<slug>/<cliSessionId>.jsonl and navigates to it.
+//   In both cases the id == our provider_thread_id.
+//   - Cursor: no external deep link exists for an existing local composer (full deeplink
+//     route table has no composerId route), so it stays null.
 function providerDeepLink(providerId: string, providerThreadId: string): { href: string; label: string } | null {
   switch (providerId) {
     case "codex":
       return { href: `codex://threads/${providerThreadId}`, label: "Open in Codex" };
+    case "claude-code":
+      return { href: `claude://resume?session=${encodeURIComponent(providerThreadId)}`, label: "Open in Claude" };
     default:
       return null;
   }
