@@ -23,6 +23,7 @@ Commands:
   stats
   doctor [--json]
   serve
+  mcp                              Run the MCP server over stdio (for agents)
 `);
 }
 
@@ -142,6 +143,17 @@ async function commandDoctor(cwd: string, asJson: boolean): Promise<void> {
   });
 }
 
+// Run the Threaddy MCP server over stdio. Designed to be wired into an
+// MCP-capable client (Claude Desktop, Codex, etc.) — the client spawns this
+// process and talks JSON-RPC over its stdin/stdout. We intentionally do NOT
+// log to stdout (which is the transport); the SDK handles framing.
+async function commandMcp(cwd: string): Promise<void> {
+  const config = await loadConfig(cwd);
+  const db = await openDatabase(config.dbPath);
+  const { runMcpServer } = await import("../mcp/server");
+  await runMcpServer(db, config);
+}
+
 async function commandServe(cwd: string): Promise<void> {
   const config = await loadConfig(cwd);
   const db = await openDatabase(config.dbPath);
@@ -217,6 +229,9 @@ export async function runCli(args: string[], cwd: string): Promise<void> {
       return;
     case "serve":
       await commandServe(cwd);
+      return;
+    case "mcp":
+      await commandMcp(cwd);
       return;
     default:
       printHelp();

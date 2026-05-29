@@ -24,29 +24,21 @@ import { Input } from "../components/ui/input";
 import { Select } from "../components/ui/select";
 import { Table, TableWrap, Td, Th, Tr } from "../components/ui/table";
 import { AppShell } from "../layout/app-shell";
+import { providerDeepLinkUrl } from "../../core/links/deep-link";
 
 // Character count past which a message body is collapsed by default
 const MSG_COLLAPSE_THRESHOLD = 500;
 
-// Deep link that opens a thread in its source provider's desktop app.
-// Returns null when the provider has no usable per-conversation deep link.
-// (Both formats verified by reverse-engineering the apps' bundles.)
-//   - Codex:       `codex://threads/<threadId>` — Codex builds exactly this to open a thread.
-//   - Claude Code: `claude://resume?session=<cliSessionId>` — the Claude desktop app's
-//                  resume handler runs importCliSession(<uuid>), which reads
-//                  ~/.claude/projects/<slug>/<cliSessionId>.jsonl and navigates to it.
-//   In both cases the id == our provider_thread_id.
-//   - Cursor: no external deep link exists for an existing local composer (full deeplink
-//     route table has no composerId route), so it stays null.
+// UI wrapper around the shared URL builder (see core/links/deep-link.ts).
+const PROVIDER_DEEP_LINK_LABELS: Record<string, string> = {
+  codex: "Open in Codex",
+  "claude-code": "Open in Claude",
+};
+
 function providerDeepLink(providerId: string, providerThreadId: string): { href: string; label: string } | null {
-  switch (providerId) {
-    case "codex":
-      return { href: `codex://threads/${providerThreadId}`, label: "Open in Codex" };
-    case "claude-code":
-      return { href: `claude://resume?session=${encodeURIComponent(providerThreadId)}`, label: "Open in Claude" };
-    default:
-      return null;
-  }
+  const href = providerDeepLinkUrl(providerId, providerThreadId);
+  if (!href) return null;
+  return { href, label: PROVIDER_DEEP_LINK_LABELS[providerId] ?? "Open in app" };
 }
 
 function OpenInProviderButton({ providerId, providerThreadId }: { providerId: string; providerThreadId: string }) {
